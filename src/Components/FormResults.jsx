@@ -22,35 +22,82 @@ import {
   Cancel as CancelIcon,
   Assessment as AssessmentIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate,useLocation  } from 'react-router-dom';
 
 const FormResults = () => {
+  const location = useLocation();
   const navigate = useNavigate();
   const [submissionData, setSubmissionData] = useState(null);
 
   useEffect(() => {
-    const resultsData = localStorage.getItem('formSubmissionResults');
-    if (resultsData) {
-      try {
-        setSubmissionData(JSON.parse(resultsData));
-      } catch (error) {
-        console.error('Failed to load submission results:', error);
-      }
+    const { formData, formConfig } = location.state || {};
+
+    if (!formData || !formConfig) {
+      console.warn('No form data or config passed');
+      return;
     }
-  }, []);
+
+    const results = [];
+    let totalQuestions = 0;
+    let correctAnswers = 0;
+
+    console.log('Form data:', formData);
+    console.log('Form config:', formConfig);
+    
+formConfig.pages.forEach((page) => {
+  page.fields.forEach((field) => {
+    if (field.hasCorrectAnswer) {
+      totalQuestions++;
+      const userAnswer = formData[field.id];
+      const correctAnswer = field.correctAnswer;
+      let isCorrect = false;
+
+      if (field.type === 'checkbox') {
+        const expected = Array.isArray(correctAnswer)
+          ? correctAnswer
+          : String(correctAnswer).split(',').map((s) => s.trim());
+        const actual = userAnswer || [];
+
+        isCorrect =
+          expected.length === actual.length &&
+          expected.every((val) => actual.includes(val));
+      } else {
+        isCorrect =
+          String(userAnswer || '').trim().toLowerCase() ===
+          String(correctAnswer).trim().toLowerCase();
+      }
+
+      if (isCorrect) correctAnswers++;
+
+      results.push({
+        fieldId: field.id,
+        fieldLabel: field.label,
+        fieldType: field.type,
+        userAnswer,
+        correctAnswer,
+        isCorrect,
+      });
+    }
+  });
+});
+
+
+    const score =
+      totalQuestions > 0
+        ? Math.round((correctAnswers / totalQuestions) * 100)
+        : 0;
+
+    setSubmissionData({
+      results,
+      totalQuestions,
+      correctAnswers,
+      score,
+      submittedAt: new Date().toISOString(),
+    });
+  }, [location.state]);
 
   const handleBackToForm = () => {
     navigate('/preview');
-  };
-
-  const handleRetakeForm = () => {
-    // Clear form data and go back to preview
-    localStorage.removeItem('formSubmissionResults');
-    navigate('/preview');
-  };
-
-  const handleBackToBuilder = () => {
-    navigate('/');
   };
 
   if (!submissionData) {
@@ -75,7 +122,7 @@ const FormResults = () => {
     );
   }
 
-  const { results, totalQuestions, correctAnswers, score, submittedAt } = submissionData;
+  const { results, totalQuestions, correctAnswers, score } = submissionData;
 
   const getScoreColor = (score) => {
     if (score >= 80) return 'success';
@@ -94,37 +141,7 @@ const FormResults = () => {
     <>
      
       <Container maxWidth="lg" sx={{ py: 4 }}>
-         <AppBar position="static" color="default" elevation={1} sx={{ mb: 4 }}>
-        <Toolbar >
-            <Box sx={{width:"100%", display: 'flex', justifyContent: 'space-between'}}>
-          <Button
-            startIcon={<ArrowBackIcon />}
-            onClick={handleBackToForm}
-            sx={{ mr: 2 }}
-          >
-            Back to Form
-          </Button>
-          <Box>
-            <Button
-              startIcon={<RefreshIcon />}
-              onClick={handleRetakeForm}
-              variant="outlined"
-              size="small"
-              sx={{ mr: 1 }}
-            >
-              Retake Form
-            </Button>
-            <Button
-              onClick={handleBackToBuilder}
-              variant="outlined"
-              size="small"
-            >
-              Form Builder
-            </Button>
-            </Box>
-          </Box>
-        </Toolbar>
-      </AppBar>
+        
                 <Typography variant="h5" gutterBottom>
             Form Results :
           </Typography>

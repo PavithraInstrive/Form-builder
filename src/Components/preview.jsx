@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Box,
-  Typography,
-  Button,
-  Paper,
   Container,
+  Typography,
+  Paper,
+  Box,
   Stack,
+  Button,
   Divider,
   AppBar,
   Toolbar,
@@ -16,41 +16,91 @@ import {
   MenuItem,
   Rating,
   Chip,
-  Snackbar,
+  CircularProgress,
 } from '@mui/material';
 import {
   NavigateBefore as NavigateBeforeIcon,
   NavigateNext as NavigateNextIcon,
-  Send as SendIcon,
   ArrowBack as ArrowBackIcon,
   Star as StarIcon,
+  PlayArrow as StartIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase';
-import { useFormContext } from '../FormContext';
+import { useParams, useNavigate } from 'react-router-dom';
+import { doc, getDoc } from 'firebase/firestore';
+import { db, auth } from '../firebase';
 
-const FormPreview = () => {
-  const { formBuilderConfig, userRole } = useFormContext();
+const FormPreviewReadonly = () => {
+  const { formId } = useParams();
   const navigate = useNavigate();
-  const [currentPreviewPage, setCurrentPreviewPage] = useState(0);
+  const [formConfig, setFormConfig] = useState(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [userRole, setUserRole] = useState('user');
 
-  const [submitSuccess, setSubmitSuccess] = useState(false);
-  const [submitError, setSubmitError] = useState('');
+  useEffect(() => {
+    const role = localStorage.getItem('userRole');
+    setUserRole(role || 'user');
+    
+    const fetchForm = async () => {
+      try {
+        const formDocRef = doc(db, 'forms', formId);
+        const formSnap = await getDoc(formDocRef);
+        
+        if (!formSnap.exists()) {
+          setError('Form not found');
+          return;
+        }
+        
+        const formData = formSnap.data();
+        setFormConfig(formData.formConfig);
+      } catch (error) {
+        console.error('Error fetching form:', error);
+        setError('Error loading form');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const currentPage = formBuilderConfig.pages[currentPreviewPage];
-  const totalPages = formBuilderConfig.pages.length;
+    fetchForm();
+  }, [formId]);
+
+  const handlePrevious = () => {
+    setCurrentPage(Math.max(0, currentPage - 1));
+  };
+
+  const handleNext = () => {
+    if (formConfig?.pages) {
+      setCurrentPage(Math.min(formConfig.pages.length - 1, currentPage + 1));
+    }
+  };
+
+  const handleStartForm = () => {
+    // Check if user is logged in
+    const user = auth.currentUser;
+    if (!user) {
+      alert('Please log in to fill out this form');
+      return;
+    }
+    
+    // Navigate to the actual form filling page
+    navigate(`/edit/${formId}`);
+  };
+
+  const handleBackToForms = () => {
+    navigate('/forms');
+  };
 
   const renderFormField = (field) => {
-    // All fields are disabled for preview - just showing structure
     const baseStyle = {
       width: '100%',
       padding: '12px',
       border: '1px solid #ddd',
       borderRadius: '4px',
       fontSize: '14px',
-      backgroundColor: '#f5f5f5',
-      cursor: 'not-allowed'
+      backgroundColor: '#f9f9f9',
+      cursor: 'not-allowed',
+      color: '#666'
     };
 
     switch (field.type) {
@@ -142,7 +192,7 @@ const FormPreview = () => {
                 <input
                   type="radio"
                   disabled
-                  style={{ marginRight: '8px' }}
+                  style={{ marginRight: '8px', cursor: 'not-allowed' }}
                 />
                 <Typography variant="body2" color="text.secondary">{option}</Typography>
               </Box>
@@ -158,7 +208,7 @@ const FormPreview = () => {
                 <input
                   type="checkbox"
                   disabled
-                  style={{ marginRight: '8px' }}
+                  style={{ marginRight: '8px', cursor: 'not-allowed' }}
                 />
                 <Typography variant="body2" color="text.secondary">{option}</Typography>
               </Box>
@@ -169,19 +219,19 @@ const FormPreview = () => {
       case 'boolean':
         return (
           <Box sx={{ display: 'flex', gap: 2 }}>
-            <label style={{ display: 'flex', alignItems: 'center' }}>
+            <label style={{ display: 'flex', alignItems: 'center', cursor: 'not-allowed' }}>
               <input 
                 type="radio" 
                 disabled
-                style={{ marginRight: '8px' }}
+                style={{ marginRight: '8px', cursor: 'not-allowed' }}
               /> 
               <Typography variant="body2" color="text.secondary">Yes</Typography>
             </label>
-            <label style={{ display: 'flex', alignItems: 'center' }}>
+            <label style={{ display: 'flex', alignItems: 'center', cursor: 'not-allowed' }}>
               <input 
                 type="radio" 
                 disabled
-                style={{ marginRight: '8px' }}
+                style={{ marginRight: '8px', cursor: 'not-allowed' }}
               /> 
               <Typography variant="body2" color="text.secondary">No</Typography>
             </label>
@@ -197,12 +247,12 @@ const FormPreview = () => {
               max={field.max || 100}
               value={Math.round(((field.min || 0) + (field.max || 100)) / 2)}
               disabled
-              style={{ width: '100%' }}
+              style={{ width: '100%', cursor: 'not-allowed' }}
             />
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
               <Typography variant="caption" color="text.secondary">{field.min || 0}</Typography>
               <Typography variant="caption" color="text.secondary">
-                Slider: {field.min || 0} - {field.max || 100}
+                Range: {field.min || 0} - {field.max || 100}
               </Typography>
               <Typography variant="caption" color="text.secondary">{field.max || 100}</Typography>
             </Box>
@@ -218,10 +268,10 @@ const FormPreview = () => {
               precision={1}
               size="large"
               icon={<StarIcon fontSize="inherit" />}
-              emptyIcon={<StarIcon style={{ opacity: 0.55 }} fontSize="inherit" />}
+              emptyIcon={<StarIcon style={{ opacity: 0.3 }} fontSize="inherit" />}
             />
             <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-              Star Rating (1-5)
+              Rating Scale (1-5 stars)
             </Typography>
           </Box>
         );
@@ -292,7 +342,7 @@ const FormPreview = () => {
         return (
           <input
             type="text"
-            placeholder="Default text field"
+            placeholder="Default input field"
             disabled
             style={baseStyle}
           />
@@ -300,65 +350,35 @@ const FormPreview = () => {
     }
   };
 
-  const handlePrevious = () => {
-    setCurrentPreviewPage(Math.max(0, currentPreviewPage - 1));
-  };
-
-  const handleNext = () => {
-    setCurrentPreviewPage(Math.min(totalPages - 1, currentPreviewPage + 1));
-  };
-
-  const handleSubmit = async () => {
-    try {
-      // Save only the form configuration to Firestore
-      const formConfigData = {
-        formConfig: formBuilderConfig,
-        createdAt: serverTimestamp(),
-        createdBy: userRole || 'admin',
-        status: 'published'
-      };
-
-      const docRef = await addDoc(collection(db, 'forms'), formConfigData);
-      
-      console.log('Form configuration saved with ID:', docRef.id);
-      setSubmitSuccess(true);
-      
-      // Navigate back to form builder after a short delay
-      setTimeout(() => {
-        navigate('/form-builder');
-      }, 2000);
-
-    } catch (error) {
-      console.error('Error saving form configuration:', error);
-      setSubmitError('Failed to save form. Please try again.');
-    }
-  };
-
-  const handleBackToBuilder = () => {
-    navigate('/form-builder');
-  };
-
-  if (!currentPage) {
+  if (loading) {
     return (
-      <Container maxWidth="md" sx={{ py: 4 }}>
-        <Paper elevation={3} sx={{ p: 4, textAlign: 'center' }}>
-          <Typography variant="h5" gutterBottom>
-            No Form Configuration Found
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            Please create a form in the builder first.
-          </Typography>
-          <Button
-            variant="contained"
-            onClick={handleBackToBuilder}
-            startIcon={<ArrowBackIcon />}
-          >
-            Go to Form Builder
-          </Button>
-        </Paper>
+      <Container maxWidth="md" sx={{ py: 4, textAlign: 'center' }}>
+        <CircularProgress />
+        <Typography variant="h6" sx={{ mt: 2 }}>Loading form preview...</Typography>
       </Container>
     );
   }
+
+  if (error || !formConfig) {
+    return (
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Alert severity="error">
+          {error || 'Form not found'}
+        </Alert>
+        <Button 
+          variant="outlined" 
+          onClick={handleBackToForms}
+          startIcon={<ArrowBackIcon />}
+          sx={{ mt: 2 }}
+        >
+          Back to Forms
+        </Button>
+      </Container>
+    );
+  }
+
+  const currentPageData = formConfig.pages[currentPage];
+  const totalPages = formConfig.pages.length;
 
   return (
     <>
@@ -367,48 +387,61 @@ const FormPreview = () => {
         <Toolbar>
           <Button
             startIcon={<ArrowBackIcon />}
-            onClick={handleBackToBuilder}
+            onClick={handleBackToForms}
             sx={{ mr: 2 }}
           >
-            Back to Builder
+            Back to Forms
           </Button>
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            Form Configuration Preview
+            Form Preview
           </Typography>
+          {userRole !== 'admin' && (
+            <Button
+              variant="contained"
+              startIcon={<StartIcon />}
+              onClick={handleStartForm}
+              color="success"
+            >
+              Start Form
+            </Button>
+          )}
         </Toolbar>
       </AppBar>
 
       <Container maxWidth="md" sx={{ py: 4 }}>
-        <Paper elevation={3} sx={{ p: 4, minHeight: '70vh' }}>
+        <Paper elevation={3} sx={{ p: 4, minHeight: '60vh' }}>
           <Box sx={{ minHeight: '400px' }}>
             <Box sx={{ mb: 4, textAlign: 'center' }}>
-              <Typography variant="h4" component="h2" gutterBottom>
-                {formBuilderConfig.formTitle || 'Form Preview'}
+              <Typography variant="h4" component="h1" gutterBottom>
+                {formConfig.formTitle || 'Form Preview'}
               </Typography>
-              <Typography variant="h5" component="h3" gutterBottom>
-                {currentPage.title}
+              <Typography variant="h5" component="h2" gutterBottom>
+                {currentPageData.title}
               </Typography>
-              {currentPage.description && (
+              {currentPageData.description && (
                 <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-                  {currentPage.description}
+                  {currentPageData.description}
                 </Typography>
               )}
- 
+             
+              {/* <Typography variant="body2" color="text.secondary">
+                Page {currentPage + 1} of {totalPages}
+              </Typography> */}
               <Divider sx={{ my: 3 }} />
             </Box>
 
-            {currentPage.fields.length === 0 ? (
+            {currentPageData.fields.length === 0 ? (
               <Box sx={{ textAlign: 'center', py: 8 }}>
                 <Typography color="text.secondary" variant="h6">
                   No fields on this page
                 </Typography>
                 <Typography color="text.secondary" variant="body2">
-                  Add some fields in the builder to see them here
+                  This page doesn't contain any form fields
                 </Typography>
               </Box>
             ) : (
               <Stack spacing={3}>
-                {currentPage.fields.map((field) => (
+                {currentPageData.fields.map((field) => (
                   <Paper key={field.id} elevation={2} sx={{ p: 3, mb: 2 }}>
                     <Typography 
                       variant="body1" 
@@ -420,7 +453,7 @@ const FormPreview = () => {
                         color: 'text.primary'
                       }}
                     >
-                      {field.label} 
+                      {field.label}
                       {field.required && (
                         <Typography 
                           component="span" 
@@ -431,13 +464,20 @@ const FormPreview = () => {
                       )}
                       {field.hasCorrectAnswer && (
                         <Chip 
-                          label="Has Answer" 
+                          label="Scored" 
                           size="small" 
                           color="primary" 
                           variant="outlined"
                           sx={{ ml: 1 }}
                         />
                       )}
+                      <Typography 
+                        component="span" 
+                        variant="caption"
+                        sx={{ color: 'text.secondary', ml: 1 }}
+                      >
+                        ({field.type})
+                      </Typography>
                     </Typography>
                     <Box>
                       {renderFormField(field)}
@@ -448,74 +488,64 @@ const FormPreview = () => {
             )}
           </Box>
 
-          {/* Navigation */}
-          <Box sx={{ mt: 6, pt: 3, borderTop: '1px solid', borderColor: 'grey.200' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Button
-                variant="outlined"
-                onClick={handlePrevious}
-                disabled={currentPreviewPage === 0}
-                startIcon={<NavigateBeforeIcon />}
-                sx={{ minWidth: 120 }}
-              >
-                Previous
-              </Button>
-              
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="body2" color="text.secondary">
-                  Page {currentPreviewPage + 1} of {totalPages}
-                </Typography>
-              </Box>
-              
-              {currentPreviewPage === totalPages - 1 ? (
+          {/* Navigation Controls */}
+          {totalPages > 1 && (
+            <Box sx={{ mt: 6, pt: 3, borderTop: '1px solid', borderColor: 'grey.200' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Button
-                  variant="contained"
-                  onClick={handleSubmit}
-                  endIcon={<SendIcon />}
+                  variant="outlined"
+                  onClick={handlePrevious}
+                  disabled={currentPage === 0}
+                  startIcon={<NavigateBeforeIcon />}
                   sx={{ minWidth: 120 }}
-                  color="success"
                 >
-                  Save Form
+                  Previous
                 </Button>
-              ) : (
+                
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Page {currentPage + 1} of {totalPages}
+                  </Typography>
+
+                </Box>
+                
                 <Button
-                  variant="contained"
+                  variant="outlined"
                   onClick={handleNext}
+                  disabled={currentPage === totalPages - 1}
                   endIcon={<NavigateNextIcon />}
                   sx={{ minWidth: 120 }}
                 >
                   Next
                 </Button>
-              )}
+              </Box>
             </Box>
-          </Box>
+          )}
+
+          {/* Call to Action */}
+          {userRole !== 'admin' && (
+            <Box sx={{ mt: 4, p: 3, backgroundColor: 'primary.50', borderRadius: 2, textAlign: 'center' }}>
+              <Typography variant="h6" gutterBottom>
+                Ready to fill out this form?
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Click the button below to start filling out the actual form
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={handleStartForm}
+                startIcon={<StartIcon />}
+                size="large"
+                color="success"
+              >
+                Start Form
+              </Button>
+            </Box>
+          )}
         </Paper>
       </Container>
-
-      {/* Success/Error Snackbars */}
-      <Snackbar
-        open={submitSuccess}
-        autoHideDuration={6000}
-        onClose={() => setSubmitSuccess(false)}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-      >
-        <Alert onClose={() => setSubmitSuccess(false)} severity="success" sx={{ width: '100%' }}>
-          Form submitted successfully! Redirecting to form builder...
-        </Alert>
-      </Snackbar>
-
-      <Snackbar
-        open={!!submitError}
-        autoHideDuration={6000}
-        onClose={() => setSubmitError('')}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-      >
-        <Alert onClose={() => setSubmitError('')} severity="error" sx={{ width: '100%' }}>
-          {submitError}
-        </Alert>
-      </Snackbar>
     </>
   );
 };
 
-export default FormPreview;
+export default FormPreviewReadonly;

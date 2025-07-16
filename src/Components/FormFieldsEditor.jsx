@@ -17,23 +17,26 @@ import {
   CardContent,
   Chip,
   Stack,
+  Alert,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
   Add as AddIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
 
 const FormFieldsEditor = ({
+  formTitle,
   pages,
+  setFormTitle,
   setPages,
   selectedField,
   setSelectedField,
   renderFormField,
   fieldTypes,
-  onRemovePage, // Use the parent's remove page handler
-  onRemoveField, // Use the parent's remove field handler
+  onRemovePage, 
+  onRemoveField,
 }) => {
-  console.log('FormFieldsEditor pages:', pages);
 
   const handlePageChange = (pageIndex, key, value) => {
     console.log('Updating page:', pageIndex, key, value);
@@ -57,14 +60,56 @@ const FormFieldsEditor = ({
     const defaultOptions = ['Option 1', 'Option 2', 'Option 3'];
     const updatedPages = [...pages];
     const fieldIndex = updatedPages[pageIndex].fields.findIndex(f => f.id === fieldId);
+
     if (fieldIndex !== -1) {
-      updatedPages[pageIndex].fields[fieldIndex] = {
-        ...updatedPages[pageIndex].fields[fieldIndex],
+      // Field types that can have correct answers by default
+      const answerableTypes = ['select', 'radio', 'checkbox', 'multi-select', 'ranking', 'boolean', 'text', 'textarea', 'slider', 'rating'];
+      const hasAnswerByDefault = answerableTypes.includes(newType);
+      const field = updatedPages[pageIndex].fields[fieldIndex];
+
+      // Reset field with type-specific properties
+      const updatedField = {
+        ...field,
         type: newType,
         label: `${newType.charAt(0).toUpperCase() + newType.slice(1)} Field`,
-        options: ['select', 'radio', 'checkbox'].includes(newType) ? defaultOptions : [],
+        hasCorrectAnswer: hasAnswerByDefault,
+        correctAnswer: hasAnswerByDefault ? (field.correctAnswer || '') : '',
       };
+
+      // Add type-specific properties
+      switch (newType) {
+        case 'select':
+        case 'radio':
+        case 'checkbox':
+        case 'multi-select':
+        case 'ranking':
+          updatedField.options = field.options || defaultOptions;
+          break;
+        case 'boolean':
+          updatedField.options = ['Yes', 'No'];
+          break;
+        case 'multi-text':
+          updatedField.textboxCount = field.textboxCount || 2;
+          updatedField.options = [];
+          break;
+        case 'slider':
+          updatedField.min = field.min !== undefined ? field.min : 0;
+          updatedField.max = field.max !== undefined ? field.max : 100;
+          updatedField.options = [];
+          break;
+        case 'file':
+        case 'image':
+          updatedField.multiple = field.multiple || false;
+          updatedField.options = [];
+          break;
+        default:
+          updatedField.options = [];
+          break;
+      }
+
+      updatedPages[pageIndex].fields[fieldIndex] = updatedField;
     }
+
     setPages(updatedPages);
   };
 
@@ -75,15 +120,45 @@ const FormFieldsEditor = ({
     }
   };
 
-  const addField = (pageIndex, type) => {
+  const addField = (pageIndex, type = 'text') => {
+    const answerableTypes = ['select', 'radio', 'checkbox', 'multi-select', 'ranking', 'boolean', 'text', 'textarea', 'slider', 'rating'];
+    const hasAnswerByDefault = answerableTypes.includes(type);
+
     const newField = {
       id: `field_${Date.now()}`,
       type,
       label: `${type.charAt(0).toUpperCase() + type.slice(1)} Field`,
       required: false,
       placeholder: '',
-      options: ['select', 'radio', 'checkbox'].includes(type) ? ['Option 1', 'Option 2'] : [],
+      hasCorrectAnswer: hasAnswerByDefault,
+      correctAnswer: '',
     };
+
+    // Add type-specific properties
+    switch (type) {
+      case 'select':
+      case 'radio':
+      case 'checkbox':
+      case 'multi-select':
+      case 'ranking':
+        newField.options = ['Option 1', 'Option 2'];
+        break;
+      case 'boolean':
+        newField.options = ['Yes', 'No'];
+        break;
+      case 'multi-text':
+        newField.textboxCount = 2;
+        break;
+      case 'slider':
+        newField.min = 0;
+        newField.max = 100;
+        break;
+      case 'file':
+      case 'image':
+        newField.multiple = false;
+        break;
+    }
+
     const updatedPages = [...pages];
     updatedPages[pageIndex].fields.push(newField);
     setPages(updatedPages);
@@ -105,8 +180,78 @@ const FormFieldsEditor = ({
     }
   };
 
+  const handleAnswerFlagChange = (pageIndex, fieldId, hasAnswer) => {
+    const updatedPages = [...pages];
+    updatedPages[pageIndex].fields = updatedPages[pageIndex].fields.map(field =>
+      field.id === fieldId ? { 
+        ...field, 
+        hasCorrectAnswer: hasAnswer,
+        correctAnswer: hasAnswer ? field.correctAnswer : ''
+      } : field
+    );
+    setPages(updatedPages);
+  };
+
+  const getCorrectAnswerPlaceholder = (field) => {
+    switch (field.type) {
+      case 'checkbox':
+      case 'multi-select':
+        return 'Enter comma-separated options (e.g., Option 1, Option 2)';
+      case 'radio':
+      case 'select':
+        return 'Enter the correct option';
+      case 'boolean':
+        return 'Enter "Yes" or "No"';
+      case 'slider':
+        return `Enter a number between ${field.min || 0} and ${field.max || 100}`;
+      case 'rating':
+        return 'Enter a number between 1 and 5';
+      case 'ranking':
+        return 'Enter JSON object with option rankings (e.g., {"Option 1": 1, "Option 2": 2})';
+      default:
+        return 'Enter the correct answer';
+    }
+  };
+
+  const getCorrectAnswerHelperText = (field) => {
+    switch (field.type) {
+      case 'checkbox':
+      case 'multi-select':
+        return 'For multiple selections, separate answers with commas';
+      case 'radio':
+      case 'select':
+        return 'Must match one of the available options exactly';
+      case 'boolean':
+        return 'Enter either "Yes" or "No"';
+      case 'slider':
+        return 'Enter the target value on the slider';
+      case 'rating':
+        return 'Enter the target star rating (1-5)';
+      case 'ranking':
+        return 'Enter rankings as JSON object where keys are options and values are ranks';
+      default:
+        return 'The exact answer to validate against';
+    }
+  };
+
   return (
     <Box>
+      <Box marginBottom={3}>
+        <TextField
+          fullWidth
+          variant="standard"
+          label="Form Title"
+          value={formTitle}
+          onChange={(e) => setFormTitle(e.target.value)}
+          sx={{
+            '& .MuiInput-input': {
+              fontSize: '1.5rem',
+              fontWeight: 400,
+            },
+          }}
+        />
+      </Box>
+      
       {pages.map((page, pageIndex) => (
         <Paper
           key={page.id}
@@ -136,7 +281,7 @@ const FormFieldsEditor = ({
                   flex: 1,
                   '& .MuiInput-input': {
                     fontSize: '1.5rem',
-                    fontWeight: 600,
+                    fontWeight: 200,
                     cursor: 'text',
                   },
                   '& .MuiInput-root': {
@@ -146,11 +291,10 @@ const FormFieldsEditor = ({
                 inputProps={{
                   style: {
                     fontSize: '1.5rem',
-                    fontWeight: 600,
+                    fontWeight: 200,
                   }
                 }}
               />
-              {/* Always show delete button for every page including "Page 1" */}
               <IconButton
                 onClick={() => deletePage(pageIndex)}
                 color="error"
@@ -218,7 +362,7 @@ const FormFieldsEditor = ({
                         value={field.label}
                         onChange={(e) => handleFieldChange(pageIndex, field.id, 'label', e.target.value)}
                         sx={{ mb: 2 }}
-                        onClick={(e) => e.stopPropagation()} // Prevent card selection when editing
+                        onClick={(e) => e.stopPropagation()}
                       />
 
                       {/* Rendered Field Preview */}
@@ -237,7 +381,7 @@ const FormFieldsEditor = ({
                             value={field.type}
                             onChange={(e) => handleFieldTypeChange(pageIndex, field.id, e.target.value)}
                             label="Field Type"
-                            onClick={(e) => e.stopPropagation()} // Prevent card selection when editing
+                            onClick={(e) => e.stopPropagation()}
                           >
                             {fieldTypes.map((f) => (
                               <MenuItem key={f.type} value={f.type}>
@@ -255,11 +399,26 @@ const FormFieldsEditor = ({
                                 handleFieldChange(pageIndex, field.id, 'required', e.target.checked)
                               }
                               size="small"
-                              onClick={(e) => e.stopPropagation()} // Prevent card selection when editing
+                              onClick={(e) => e.stopPropagation()}
                             />
                           }
                           label="Required"
-                          onClick={(e) => e.stopPropagation()} // Prevent card selection when editing
+                          onClick={(e) => e.stopPropagation()}
+                        />
+
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              checked={field.hasCorrectAnswer || false}
+                              onChange={(e) =>
+                                handleAnswerFlagChange(pageIndex, field.id, e.target.checked)
+                              }
+                              size="small"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          }
+                          label="Has Answer"
+                          onClick={(e) => e.stopPropagation()}
                         />
 
                         <Box sx={{ flexGrow: 1 }} />
@@ -277,30 +436,95 @@ const FormFieldsEditor = ({
                         </IconButton>
                       </Box>
 
-                      {/* Answer Field for Validation */}
-                      <Box sx={{ mt: 2 }}>
-                        <TextField
-                          fullWidth
-                          size="small"
-                          label="Correct Answer"
-                          value={field.correctAnswer || ''}
-                          onChange={(e) => handleFieldChange(pageIndex, field.id, 'correctAnswer', e.target.value)}
-                          placeholder={
-                            field.type === 'checkbox' ? 'Enter comma-separated options (e.g., Option 1, Option 2)' :
-                            field.type === 'radio' || field.type === 'select' ? 'Enter the correct option' :
-                            'Enter the correct answer'
-                          }
-                          sx={{ mt: 1 }}
-                          // helperText={
-                          //   field.type === 'checkbox' ? 'For checkboxes, separate multiple answers with commas' :
-                          //   field.type === 'radio' || field.type === 'select' ? 'Select from available options' :
-                          //   'The exact answer to validate against'
-                          // }
-                          onClick={(e) => e.stopPropagation()} // Prevent card selection when editing
-                        />
-                      </Box>
+                      {/* Placeholder field for text-based inputs */}
+                      {['text', 'textarea'].includes(field.type) && (
+                        <Box sx={{ mt: 2 }}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Placeholder Text"
+                            value={field.placeholder || ''}
+                            onChange={(e) => handleFieldChange(pageIndex, field.id, 'placeholder', e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </Box>
+                      )}
 
-                      {(['select', 'radio', 'checkbox'].includes(field.type)) && (
+                      {/* File upload options */}
+                      {['file', 'image'].includes(field.type) && (
+                        <Box sx={{ mt: 2 }}>
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={field.multiple || false}
+                                onChange={(e) =>
+                                  handleFieldChange(pageIndex, field.id, 'multiple', e.target.checked)
+                                }
+                                size="small"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            }
+                            label="Allow Multiple Files"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </Box>
+                      )}
+
+                      {/* Answer Field for Validation */}
+                      {field.hasCorrectAnswer && (
+                        <Box sx={{ mt: 2 }}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Correct Answer"
+                            value={field.correctAnswer || ''}
+                            onChange={(e) => handleFieldChange(pageIndex, field.id, 'correctAnswer', e.target.value)}
+                            placeholder={getCorrectAnswerPlaceholder(field)}
+                            helperText={getCorrectAnswerHelperText(field)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </Box>
+                      )}
+
+                      {/* Slider specific controls */}
+                      {field.type === 'slider' && (
+                        <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+                          <TextField
+                            label="Min"
+                            type="number"
+                            size="small"
+                            value={field.min !== undefined ? field.min : 0}
+                            onChange={(e) => handleFieldChange(pageIndex, field.id, 'min', Number(e.target.value))}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <TextField
+                            label="Max"
+                            type="number"
+                            size="small"
+                            value={field.max !== undefined ? field.max : 100}
+                            onChange={(e) => handleFieldChange(pageIndex, field.id, 'max', Number(e.target.value))}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </Stack>
+                      )}
+
+                      {/* Multi-text specific controls */}
+                      {field.type === 'multi-text' && (
+                        <Box sx={{ mt: 2 }}>
+                          <TextField
+                            label="Number of Textboxes"
+                            type="number"
+                            size="small"
+                            value={field.textboxCount || 2}
+                            onChange={(e) => handleFieldChange(pageIndex, field.id, 'textboxCount', Math.max(1, Number(e.target.value)))}
+                            inputProps={{ min: 1 }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </Box>
+                      )}
+
+                      {/* Options for select, radio, checkbox, etc. */}
+                      {(['select', 'radio', 'checkbox', 'multi-select', 'ranking'].includes(field.type)) && (
                         <Box sx={{ mt: 2 }} onClick={(e) => e.stopPropagation()}>
                           <Typography variant="subtitle2" sx={{ mb: 1 }}>
                             Options:
@@ -347,6 +571,17 @@ const FormFieldsEditor = ({
                           </Stack>
                         </Box>
                       )}
+
+                      {/* Special note for ranking fields */}
+                      {field.type === 'ranking' && field.hasCorrectAnswer && (
+                        <Alert severity="info" sx={{ mt: 2 }}>
+                          <Typography variant="caption">
+                            For ranking fields, the correct answer should be a JSON object like:
+                            <br />
+                            <code>{`{"Option 1": 1, "Option 2": 2, "Option 3": 3}`}</code>
+                          </Typography>
+                        </Alert>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
@@ -354,13 +589,13 @@ const FormFieldsEditor = ({
             )}
 
             {/* Add Field Button */}
-            <Box sx={{ textAlign: 'center', mt: 3 }}>
+            <Box sx={{ textAlign: 'end', mt: 3 }}>
               <Button
                 variant="contained"
                 color="success"
                 onClick={() => addField(pageIndex, 'text')}
                 startIcon={<AddIcon />}
-                size="large"
+                size="medium"
               >
                 Add Field
               </Button>
