@@ -441,48 +441,58 @@ const FormPreviewReadonly = () => {
               </Box>
             ) : (
               <Stack spacing={3}>
-                {currentPageData.fields.map((field) => (
-                  <Paper key={field.id} elevation={2} sx={{ p: 3, mb: 2 }}>
-                    <Typography 
-                      variant="body1" 
-                      component="label" 
-                      sx={{ 
-                        display: 'block',
-                        fontWeight: 500,
-                        mb: 1,
-                        color: 'text.primary'
-                      }}
-                    >
-                      {field.label}
-                      {field.required && (
+                {currentPageData.fields.map((field,index) => (
+                  (() => {
+                    let questionNumber = index + 1;
+                    if (formConfig?.pages && currentPage > 0) {
+                      questionNumber += formConfig.pages
+                        .slice(0, currentPage)
+                        .reduce((acc, p) => acc + (p.fields?.length || 0), 0);
+                    }
+                    return (
+                      <Paper key={field.id || index} elevation={2} sx={{ p: 3, mb: 2 }}>
                         <Typography 
-                          component="span" 
-                          sx={{ color: 'error.main', ml: 0.5 }}
+                          variant="body1" 
+                          component="label" 
+                          sx={{ 
+                            display: 'block',
+                            fontWeight: 500,
+                            mb: 1,
+                            color: 'text.primary'
+                          }}
                         >
-                          *
+                          {questionNumber}. {field.label}
+                          {field.required && (
+                            <Typography 
+                              component="span" 
+                              sx={{ color: 'error.main', ml: 0.5 }}
+                            >
+                              *
+                            </Typography>
+                          )}
+                          {field.hasCorrectAnswer && (
+                            <Chip 
+                              label="Scored" 
+                              size="small" 
+                              color="primary" 
+                              variant="outlined"
+                              sx={{ ml: 1 }}
+                            />
+                          )}
+                          <Typography 
+                            component="span" 
+                            variant="caption"
+                            sx={{ color: 'text.secondary', ml: 1 }}
+                          >
+                            ({field.type})
+                          </Typography>
                         </Typography>
-                      )}
-                      {field.hasCorrectAnswer && (
-                        <Chip 
-                          label="Scored" 
-                          size="small" 
-                          color="primary" 
-                          variant="outlined"
-                          sx={{ ml: 1 }}
-                        />
-                      )}
-                      <Typography 
-                        component="span" 
-                        variant="caption"
-                        sx={{ color: 'text.secondary', ml: 1 }}
-                      >
-                        ({field.type})
-                      </Typography>
-                    </Typography>
-                    <Box>
-                      {renderFormField(field)}
-                    </Box>
-                  </Paper>
+                        <Box>
+                          {renderFormField(field)}
+                        </Box>
+                      </Paper>
+                    );
+                  })()
                 ))}
               </Stack>
             )}

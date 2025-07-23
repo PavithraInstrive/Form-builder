@@ -18,6 +18,10 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  FormControlLabel,
+  Switch,
+  Alert,
+  Snackbar
 } from "@mui/material";
 import {
   Visibility as PreviewIcon,
@@ -27,6 +31,7 @@ import {
   Publish as PublishIcon,
   UnpublishedOutlined as UnpublishIcon,
   Assessment as AssessmentIcon,
+  Notifications as NotificationsIcon,
 } from "@mui/icons-material";
 import { 
   getDocs, 
@@ -34,19 +39,32 @@ import {
   doc, 
   deleteDoc, 
   updateDoc,
-  serverTimestamp 
+  serverTimestamp,
+  where,
+  query 
 } from "firebase/firestore";
 import {auth , db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 
+// Import your simple notification service
+import { sendNotificationToAllUsers } from "../utils/FormService";
+
 const SimpleFormListPage = () => {
-    const role = localStorage.getItem('userRole');
+  const role = localStorage.getItem('userRole');
   const [forms, setForms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedForm, setSelectedForm] = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editFormData, setEditFormData] = useState({ title: "", description: "" });
+  
+  // NEW: Notification states
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [sendNotifications, setSendNotifications] = useState(true);
+  const [customMessage, setCustomMessage] = useState("");
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  
   const navigate = useNavigate();
 
   console.log(forms);
@@ -64,9 +82,8 @@ const SimpleFormListPage = () => {
         id: doc.id,
         ...doc.data(),
       }));
-            console.log("Raw snapshot:", allData);
+      console.log("Raw snapshot:", allData);
 
-      
       const formList = allData.filter(item => 
         item.formConfig && 
         item.formConfig.formTitle && 
@@ -88,17 +105,26 @@ const SimpleFormListPage = () => {
 
   useEffect(() => {
     fetchForms();
+    checkTokens();
   }, []);
 
   const handlePreview = (form) => {
-    // localStorage.setItem('formBuilderConfig', JSON.stringify(form.formConfig));
     if(!isAdmin) {
-    navigate(`/edit/${form.id}`);
+      navigate(`/edit/${form.id}`);
     }
     else {
       navigate(`/preview/${form.id}`);
     }
   };
+
+  const checkTokens = async () => {
+  const snapshot = await getDocs(collection(db, 'userTokens'));
+  console.log('Number of user tokens:', snapshot.docs.length);
+  snapshot.docs.forEach(doc => {
+    console.log('User:', doc.id, 'Token:', doc.data().token.substring(0, 20) + '...');
+  });
+};
+checkTokens();
 
   const handleEdit = (form) => {
     if (!isAdmin) {
@@ -107,7 +133,6 @@ const SimpleFormListPage = () => {
     }
     
     localStorage.setItem('formBuilderConfig', JSON.stringify(form.formConfig));
-    // Go to form builder in edit mode
     navigate(`/form-builder?formId=${form.id}&edit=true`);
   };
 
@@ -116,6 +141,11 @@ const SimpleFormListPage = () => {
 
     try {
       await deleteDoc(doc(db, "forms", selectedForm.id));
+      const q = query(collection(db, "formSubmissions"), where("formId", "==", selectedForm.id));
+      const querySnapshot = await getDocs(q);
+      querySnapshot.forEach((doc) => {
+        deleteDoc(doc.ref);
+      });
       setForms(forms.filter(form => form.id !== selectedForm.id));
       setDeleteDialogOpen(false);
       setSelectedForm(null);
@@ -126,31 +156,76 @@ const SimpleFormListPage = () => {
     }
   };
 
-  const handlePublishToggle = async (form) => {
+  // UPDATED: New publish function with notifications
+  const handlePublishClick = (form) => {
     if (!isAdmin) {
       alert("Only admins can publish/unpublish forms");
       return;
     }
 
+    setSelectedForm(form);
+    
+    // If form is being published (not unpublished), show notification dialog
+    if (!form.published) {
+      setCustomMessage(`"${form.formConfig?.formTitle}" form has been published and is now available for submission.`);
+      setPublishDialogOpen(true);
+    } else {
+      // If unpublishing, do it directly without notifications
+      handlePublishToggle(form, false);
+    }
+  };
+
+  // UPDATED: Publish function with notification support
+  const handlePublishToggle = async (form, showNotificationDialog = true, sendNotifs = false) => {
     try {
+      setNotificationLoading(true);
+      
       const newPublishedStatus = !form.published;
+      
+      // Update form in Firestore
       await updateDoc(doc(db, "forms", form.id), {
         published: newPublishedStatus,
         publishedAt: newPublishedStatus ? serverTimestamp() : null,
         updatedAt: serverTimestamp()
       });
 
+      // Update local state
       setForms(forms.map(f => 
         f.id === form.id 
           ? { ...f, published: newPublishedStatus }
           : f
       ));
-      
-      alert(`Form ${newPublishedStatus ? 'published' : 'unpublished'} successfully!`);
+
+      // Send notifications if publishing and user chose to send them
+      if (newPublishedStatus && sendNotifs) {
+        try {
+          const result = await sendNotificationToAllUsers(
+            'New Form Available',
+            customMessage || `"${form.formConfig?.formTitle}" form has been published and is now available.`,
+            form.id
+          );
+          
+          setSuccessMessage(`Form published and ${result.sent} users notified!`);
+        } catch (notificationError) {
+          console.error('Failed to send notifications:', notificationError);
+          setSuccessMessage('Form published but notifications failed to send.');
+        }
+      } else {
+        setSuccessMessage(`Form ${newPublishedStatus ? 'published' : 'unpublished'} successfully!`);
+      }
+
     } catch (error) {
       console.error("Error updating form:", error);
       alert("Failed to update form status");
+    } finally {
+      setNotificationLoading(false);
+      setPublishDialogOpen(false);
     }
+  };
+
+  // Handle the publish with notifications
+  const handleConfirmPublish = () => {
+    handlePublishToggle(selectedForm, true, sendNotifications);
   };
 
   const handleEditFormDetails = async () => {
@@ -183,14 +258,13 @@ const SimpleFormListPage = () => {
     }
   };
 
-
   const openDeleteDialog = (form) => {
     setSelectedForm(form);
     setDeleteDialogOpen(true);
   };
 
   const handleViewSubmissions = (form) => {
-navigate(`/submissions?formId=${form.id}`);
+    navigate(`/submissions?formId=${form.id}`);
   };
 
   const formatDate = (timestamp) => {
@@ -205,7 +279,6 @@ navigate(`/submissions?formId=${form.id}`);
     });
   };
 
-
   if (loading) {
     return (
       <Container maxWidth="lg" sx={{ py: 4, textAlign: 'center' }}>
@@ -218,23 +291,22 @@ navigate(`/submissions?formId=${form.id}`);
   }
 
   return (
-    <Container maxWidth="lg" >
+    <Container maxWidth="lg">
       <Box sx={{ mb: 4 }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" >
+        <Stack direction="row" justifyContent="space-between" alignItems="center">
           <Typography variant="h4">
             {isAdmin ? 'Form Management' : 'Available Forms'}
           </Typography>
-           {isAdmin && (
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => navigate('/form-builder')}
-          >
-            Create New Form
-          </Button>
-        )}
+          {isAdmin && (
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => navigate('/form-builder')}
+            >
+              Create New Form
+            </Button>
+          )}
         </Stack>
-       
       </Box>
 
       {forms.length === 0 ? (
@@ -256,6 +328,11 @@ navigate(`/submissions?formId=${form.id}`);
         <Grid container spacing={3}>
           {forms
             .filter(form => isAdmin || form.published)
+            .sort((a, b) => {
+              const aDate = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+              const bDate = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+              return bDate - aDate;
+            })
             .map((form) => (
               <Grid item xs={12} sm={6} md={4} key={form.id}>
                 <Card 
@@ -322,13 +399,21 @@ navigate(`/submissions?formId=${form.id}`);
                             <EditIcon />
                           </IconButton>
 
+                          {/* UPDATED: Publish button with notification support */}
                           <IconButton
                             color={form.published ? 'warning' : 'success'}
-                            onClick={() => handlePublishToggle(form)}
-                            title={form.published ? 'Unpublish Form' : 'Publish Form'}
+                            onClick={() => handlePublishClick(form)}
+                            title={form.published ? 'Unpublish Form' : 'Publish Form & Notify Users'}
                             size="small"
+                            disabled={notificationLoading}
                           >
-                            {form.published ? <UnpublishIcon /> : <PublishIcon />}
+                            {notificationLoading ? (
+                              <CircularProgress size={20} />
+                            ) : (
+                              <>
+                                {form.published ? <UnpublishIcon /> : <PublishIcon />}
+                              </>
+                            )}
                           </IconButton>
 
                           <IconButton
@@ -351,27 +436,26 @@ navigate(`/submissions?formId=${form.id}`);
                         </>
                       )}
 
-                     {!isAdmin && (
-  <>
-    {form.alreadySubmitted ? (
-      <Chip
-        label="Already Submitted"
-        color="info"
-        sx={{ ml: 'auto' }}
-      />
-    ) : (
-      <Button
-        variant="contained"
-        size="small"
-        onClick={() => handlePreview(form)}
-        sx={{ ml: 'auto' }}
-      >
-        Start Form
-      </Button>
-    )}
-  </>
-)}
-
+                      {!isAdmin && (
+                        <>
+                          {form.alreadySubmitted ? (
+                            <Chip
+                              label="Already Submitted"
+                              color="info"
+                              sx={{ ml: 'auto' }}
+                            />
+                          ) : (
+                            <Button
+                              variant="contained"
+                              size="small"
+                              onClick={() => handlePreview(form)}
+                              sx={{ ml: 'auto' }}
+                            >
+                              Start Form
+                            </Button>
+                          )}
+                        </>
+                      )}
                     </Stack>
                   </CardActions>
                 </Card>
@@ -379,6 +463,74 @@ navigate(`/submissions?formId=${form.id}`);
             ))}
         </Grid>
       )}
+
+      {/* NEW: Publish with Notifications Dialog */}
+      <Dialog 
+        open={publishDialogOpen} 
+        onClose={() => setPublishDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box display="flex" alignItems="center" gap={1}>
+            <NotificationsIcon color="primary" />
+            <Typography variant="h6">
+              Publish Form & Notify Users
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" gutterBottom>
+            You're about to publish <strong>"{selectedForm?.formConfig?.formTitle}"</strong>
+          </Typography>
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={sendNotifications}
+                onChange={(e) => setSendNotifications(e.target.checked)}
+                color="primary"
+              />
+            }
+            label="Send push notifications to all users"
+            sx={{ mb: 2, mt: 2 }}
+          />
+
+          {sendNotifications && (
+            <TextField
+              fullWidth
+              multiline
+              rows={3}
+              label="Custom notification message (optional)"
+              value={customMessage}
+              onChange={(e) => setCustomMessage(e.target.value)}
+              placeholder={`"${selectedForm?.formConfig?.formTitle}" form has been published and is now available.`}
+              sx={{ mb: 2 }}
+            />
+          )}
+
+          <Alert severity={sendNotifications ? "info" : "warning"}>
+            {sendNotifications ? (
+              <>📱 All users who enabled notifications will be instantly notified about this form.</>
+            ) : (
+              <>📝 Form will be published without sending notifications. Users will need to check the forms page.</>
+            )}
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPublishDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmPublish}
+            variant="contained"
+            disabled={notificationLoading}
+            startIcon={notificationLoading ? <CircularProgress size={20} /> : <PublishIcon />}
+          >
+            {notificationLoading ? 'Publishing...' : 'Publish Form'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
@@ -433,6 +585,18 @@ navigate(`/submissions?formId=${form.id}`);
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Success Snackbar */}
+      <Snackbar
+        open={!!successMessage}
+        autoHideDuration={6000}
+        onClose={() => setSuccessMessage('')}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert onClose={() => setSuccessMessage('')} severity="success" sx={{ width: '100%' }}>
+          {successMessage}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };

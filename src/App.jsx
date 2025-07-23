@@ -22,42 +22,53 @@ import FormSubmissionsPage from "./Pages/FormSubmissionsPage";
 import ViewSubmission from "./Components/ViewSubmission";
 import FormPreviewReadonly from "./Components/preview";
 
+// Create a wrapper component for form builder related routes
+const FormBuilderRoutes = () => {
+  return (
+    <FormProvider>
+      <Routes>
+        <Route path="form-builder" element={<FormBuilderPage />} />
+        <Route path="preview" element={<FormPreviewPage />} />
+      </Routes>
+    </FormProvider>
+  );
+};
+
 const App = () => {
   return (
     <AuthProvider>
-      <FormProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Navigate to="/home" replace />} />
-            <Route path="/home" element={<LandingPage />} />
-            <Route path="/signup" element={<SignUp />} />
-            <Route path="/signin" element={<Login />} />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Navigate to="/home" replace />} />
+          <Route path="/home" element={<LandingPage />} />
+          <Route path="/signup" element={<SignUp />} />
+          <Route path="/signin" element={<Login />} />
+          
+          <Route
+            path="/"
+            element={
+              <PrivateRoute>
+                <Layout />
+              </PrivateRoute>
+            }
+          >
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="forms" element={<FormListPage />} />
+            <Route path="edit/:formId" element={<EditForm />} />
+            <Route path="results" element={<FormResultsPage />} />
+            <Route path="/submissions" element={<FormSubmissionsPage />} />
+            <Route path="view-submission/:submissionId" element={<ViewSubmission/>} />
+            <Route path="preview/:formId" element={<FormPreviewReadonly />} />
             
-            <Route
-              path="/"
-              element={
-                <PrivateRoute>
-                  <Layout />
-                </PrivateRoute>
-              }
-            >
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="forms" element={<FormListPage />} />
-              <Route path="edit/:formId" element={<EditForm />} />
-              {/* <Route path="forms" element={<Forms />} /> */}
-              <Route path="form-builder" element={<FormBuilderPage />} />
-              <Route path="preview" element={<FormPreviewPage />} />
-              <Route path="results" element={<FormResultsPage />} />
-              <Route path="/submissions" element={<FormSubmissionsPage />} />
-              <Route path ="view-submission/:submissionId" element={<ViewSubmission/>} />
-              <Route path="preview/:formId" element={<FormPreviewReadonly />} />
-              {/* <Route path="import" element={<FormJsonEditorPage />} /> */}
-              {/* <Route path="analytics" element={<Analytics />} /> */}
-              {/* <Route path="settings" element={<Settings />} /> */}
-            </Route>
-          </Routes>
-        </BrowserRouter>
-      </FormProvider> 
+            {/* Form Builder Routes with their own FormProvider context */}
+            <Route path="*" element={<FormBuilderRoutes />} />
+            
+            {/* <Route path="import" element={<FormJsonEditorPage />} /> */}
+            {/* <Route path="analytics" element={<Analytics />} /> */}
+            {/* <Route path="settings" element={<Settings />} /> */}
+          </Route>
+        </Routes>
+      </BrowserRouter>
     </AuthProvider>
   );
 };

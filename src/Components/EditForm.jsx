@@ -32,6 +32,7 @@ import {
   NavigateNext as NavigateNextIcon,
   Star as StarIcon,
 } from '@mui/icons-material';
+import axios from 'axios';
 
 const EditForm = () => {
   const { formId } = useParams();
@@ -552,6 +553,7 @@ const EditForm = () => {
       // Process form data to handle FileList objects
       const processedFormData = processFormDataForStorage(formData);     
        const userDetails = JSON.parse(localStorage.getItem('userDetails'));
+      const token = JSON.parse(localStorage.getItem('device_token'));
 
 
       const submissionData = {
@@ -569,6 +571,11 @@ const EditForm = () => {
       await updateDoc(formDocRef, {
         submittedUserIds: arrayUnion(user.uid), 
       });
+       await axios.post('http://localhost:3000/api/notify', {
+      token: token,
+      "title": "Test Push",
+      "body": "User Submitted " + submissionData.formTitle + " Form !"
+    });
 
       setSubmitSuccess(true);
       
@@ -629,37 +636,46 @@ const EditForm = () => {
         )}
 
         <Stack spacing={3}>
-          {current.fields.map((field) => (
-            <Box key={field.id}>
-              <Typography 
-                variant="body1" 
-                component="label" 
-                htmlFor={field.id}
-                sx={{ 
-                  display: 'block',
-                  fontWeight: 500,
-                  mb: 1,
-                  color: validationErrors[field.id] ? 'error.main' : 'text.primary'
-                }}
-              >
-                {field.label}
-                {field.required && (
-                  <Typography 
-                    component="span" 
-                    sx={{ color: 'error.main', ml: 0.5 }}
-                  >
-                    *
+          {current.fields.map((field, index) => {
+            // Calculate continuous question number across all pages
+            let questionNumber = index + 1;
+            if (formConfig?.pages && currentPage > 0) {
+              questionNumber += formConfig.pages
+                .slice(0, currentPage)
+                .reduce((acc, p) => acc + (p.fields?.length || 0), 0);
+            }
+            return (
+              <Box key={field.id}>
+                <Typography 
+                  variant="body1" 
+                  component="label" 
+                  htmlFor={field.id}
+                  sx={{ 
+                    display: 'block',
+                    fontWeight: 500,
+                    mb: 1,
+                    color: validationErrors[field.id] ? 'error.main' : 'text.primary'
+                  }}
+                >
+                  {questionNumber}. {field.label}
+                  {field.required && (
+                    <Typography 
+                      component="span" 
+                      sx={{ color: 'error.main', ml: 0.5 }}
+                    >
+                      *
+                    </Typography>
+                  )}
+                </Typography>
+                {renderField(field)}
+                {validationErrors[field.id] && (
+                  <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
+                    {validationErrors[field.id]}
                   </Typography>
                 )}
-              </Typography>
-              {renderField(field)}
-              {validationErrors[field.id] && (
-                <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
-                  {validationErrors[field.id]}
-                </Typography>
-              )}
-            </Box>
-          ))}
+              </Box>
+            );
+          })}
         </Stack>
 
         <Box sx={{ mt: 6, pt: 3, borderTop: '1px solid', borderColor: 'grey.200' }}>

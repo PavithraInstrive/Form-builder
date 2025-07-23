@@ -26,7 +26,7 @@ import {
   Star as StarIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp,query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useFormContext } from '../FormContext';
 
@@ -308,9 +308,10 @@ const FormPreview = () => {
     setCurrentPreviewPage(Math.min(totalPages - 1, currentPreviewPage + 1));
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
     try {
-      // Save only the form configuration to Firestore
       const formConfigData = {
         formConfig: formBuilderConfig,
         createdAt: serverTimestamp(),
@@ -319,13 +320,33 @@ const FormPreview = () => {
       };
 
       const docRef = await addDoc(collection(db, 'forms'), formConfigData);
-      
       console.log('Form configuration saved with ID:', docRef.id);
+      const q = query(collection(db, 'fcmTokens'), where('role', '==', 'user'));
+      const snapshot = await getDocs(q);
+      const tokens = snapshot.docs.map(doc => doc.data()?.token);
+
+      // Send push notification to all users (example: tokens fetched from backend)
+      // You need to fetch all user tokens from your backend or Firestore
+      // Here is a sample fetch to your backend endpoint
+      try {
+        const notifyRes = await fetch('http://localhost:3000/api/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tokens: tokens,
+            title: 'New Survey Available!',
+            body: `A new survey "${formBuilderConfig.formTitle}" has been published. Please submit your response!`,
+          })
+        });
+        const notifyJson = await notifyRes.json();
+        console.log('Notification sent to all users:', notifyJson);
+      } catch (notifyErr) {
+        console.error('Error sending notification to all users:', notifyErr);
+      }
+
       setSubmitSuccess(true);
-      
-      // Navigate back to form builder after a short delay
       setTimeout(() => {
-        navigate('/form-builder');
+        navigate('/forms');
       }, 2000);
 
     } catch (error) {
@@ -408,41 +429,51 @@ const FormPreview = () => {
               </Box>
             ) : (
               <Stack spacing={3}>
-                {currentPage.fields.map((field) => (
-                  <Paper key={field.id} elevation={2} sx={{ p: 3, mb: 2 }}>
-                    <Typography 
-                      variant="body1" 
-                      component="label" 
-                      sx={{ 
-                        display: 'block',
-                        fontWeight: 500,
-                        mb: 1,
-                        color: 'text.primary'
-                      }}
-                    >
-                      {field.label} 
-                      {field.required && (
+                {currentPage.fields.map((field,index) => (
+                  (() => {
+                    let questionNumber = index + 1;
+                    if (formBuilderConfig?.pages && currentPreviewPage > 0) {
+                      questionNumber += formBuilderConfig.pages
+                        .slice(0, currentPreviewPage)
+                        .reduce((acc, p) => acc + (p.fields?.length || 0), 0);
+                    }
+                    return (
+                      <Paper key={field.id || index} elevation={2} sx={{ p: 3, mb: 2 }}>
                         <Typography 
-                          component="span" 
-                          sx={{ color: 'error.main', ml: 0.5 }}
+                          variant="body1" 
+                          component="label" 
+                          sx={{ 
+                            display: 'block',
+                            fontWeight: 500,
+                            mb: 1,
+                            color: 'text.primary'
+                          }}
                         >
-                          *
+                         {questionNumber}. {field.label} 
+                          {field.required && (
+                            <Typography 
+                              component="span" 
+                              sx={{ color: 'error.main', ml: 0.5 }}
+                            >
+                              *
+                            </Typography>
+                          )}
+                          {field.hasCorrectAnswer && (
+                            <Chip 
+                              label="Has Answer" 
+                              size="small" 
+                              color="primary" 
+                              variant="outlined"
+                              sx={{ ml: 1 }}
+                            />
+                          )}
                         </Typography>
-                      )}
-                      {field.hasCorrectAnswer && (
-                        <Chip 
-                          label="Has Answer" 
-                          size="small" 
-                          color="primary" 
-                          variant="outlined"
-                          sx={{ ml: 1 }}
-                        />
-                      )}
-                    </Typography>
-                    <Box>
-                      {renderFormField(field)}
-                    </Box>
-                  </Paper>
+                        <Box>
+                          {renderFormField(field)}
+                        </Box>
+                      </Paper>
+                    );
+                  })()
                 ))}
               </Stack>
             )}

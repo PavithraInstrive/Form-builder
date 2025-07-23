@@ -33,28 +33,12 @@ import {
 import FormFieldsEditor from './FormFieldsEditor';
 import FormJsonEditor from './FormJsonEditor';
 import { useFormContext } from '../FormContext';
+import axios from 'axios';
+import CircularProgress from '@mui/material/CircularProgress';
+
 
 const FormBuilder = () => {
-  // Helper: update form in Firestore if in edit mode
-  const updateFormInFirestore = async () => {
-    const params = new URLSearchParams(window.location.search);
-    const formId = params.get('formId');
-    const isEdit = params.get('edit') === 'true';
-    if (formId && isEdit) {
-      try {
-        // Only update the form, do not create a new one
-        const { getFirestore, doc, updateDoc, serverTimestamp } = await import('firebase/firestore');
-        const { db } = await import('../firebase');
-        await updateDoc(doc(db, 'forms', formId), {
-          formConfig: formBuilderConfig,
-          updatedAt: serverTimestamp(),
-        });
-        alert('Form updated successfully!');
-      } catch (err) {
-        alert('Failed to update form: ' + err.message);
-      }
-    }
-  };
+
   const navigate = useNavigate();
   const { formBuilderConfig, setFormBuilderConfig, getDefaultFormConfig } = useFormContext();
   
@@ -62,16 +46,19 @@ const FormBuilder = () => {
   const [selectedField, setSelectedField] = useState(null);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
+const [generationPrompt, setGenerationPrompt] = useState('');
+const [loading, setLoading] = useState(false);
 
-  // If editing, load config from localStorage (for edit mode)
+
+
   useEffect(() => {
     setIsLoading(false);
-    // Check for edit mode in URL
+
     const params = new URLSearchParams(window.location.search);
     const formId = params.get('formId');
     const isEdit = params.get('edit') === 'true';
     if (formId && isEdit) {
-      // Try to load config from localStorage (set by FormListPage)
       const config = localStorage.getItem('formBuilderConfig');
       if (config) {
         try {
@@ -373,9 +360,6 @@ const FormBuilder = () => {
     }
   };
 
-  const handlePreview = () => {
-    navigate('/preview');
-  };
 
   const handleImportJson = (event) => {
     const file = event.target.files[0];
@@ -436,14 +420,12 @@ const FormBuilder = () => {
     }
   };
 
-  const handleDownloadSample = () => {
-    try {
-      const sampleConfig = {
+   const sampleConfig = {
         formTitle: "Sample Form",
         pages: [
           {
             id: "sample_page_1",
-            title: "Contact Information",
+            title: "Page 1",
             description: "Please provide your contact details",
             fields: [
               {
@@ -514,6 +496,87 @@ const FormBuilder = () => {
         ]
       };
 
+
+const handleGenerate = async () => {
+  setLoading(true); 
+  try {
+    // Check if we have an existing form to modify
+    const hasExistingForm = formBuilderConfig.pages && formBuilderConfig.pages.length > 0 && 
+                           formBuilderConfig.pages.some(page => page.fields && page.fields.length > 0);
+    
+    let prompt;
+    
+    if (hasExistingForm) {
+      // For existing forms, provide current config as context
+      prompt = `You are a form builder assistant. I have an existing form configuration that I want to modify. 
+      
+CURRENT FORM CONFIGURATION:
+${JSON.stringify(formBuilderConfig, null, 2)}
+
+MODIFICATION REQUEST: ${generationPrompt}
+
+Please return the MODIFIED form configuration as JSON. Keep all existing fields and pages unless specifically asked to remove them. Only add, modify, or remove fields as requested in the modification request. Use the same structure as the current configuration.
+
+Return only the JSON response:`;
+    } else {
+      // For new forms, use the original approach
+      prompt = `You are a form builder assistant. Based on a prompt, return a JSON form configuration.
+
+Use the following structure and send response only the json:
+${JSON.stringify(sampleConfig, null, 2)}
+
+Prompt: ${generationPrompt}`;
+    }
+
+    const response = await axios.post('http://localhost:3000/api/claude', {
+      prompt: prompt
+    });
+
+    console.log('Claude response:', response.data.content);
+    const aiContent = response.data?.content || '{}';
+    let generatedForm;
+
+    try {
+      // Try normal JSON.parse
+      generatedForm = JSON.parse(aiContent);
+    } catch {
+      // Try to extract JSON inside triple backticks
+      const match = aiContent.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+      if (match) {
+        try {
+          generatedForm = JSON.parse(match[1]);
+        } catch (jsonError) {
+          console.error('Failed to parse JSON from inside code block:', jsonError);
+          generatedForm = {};
+        }
+      } else {
+        console.warn('No JSON code block found in AI response');
+        generatedForm = {};
+      }
+    }
+
+    // Validate the generated form has the required structure
+    if (!generatedForm.pages || !Array.isArray(generatedForm.pages)) {
+      throw new Error('Invalid form structure returned by AI');
+    }
+
+    setFormBuilderConfig(generatedForm);
+    setGenerateDialogOpen(false);
+    setGenerationPrompt('');
+  } catch (error) {
+    console.error('Claude API error:', error.response?.data || error.message);
+    alert(`Failed to generate form: ${error.message || 'Unknown error'}`);
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+
+
+  const handleDownloadSample = () => {
+    try {
+     
       const jsonString = JSON.stringify(sampleConfig, null, 2);
       
       const blob = new Blob([jsonString], { type: 'application/json' });
@@ -596,6 +659,16 @@ const FormBuilder = () => {
             <Typography variant="h5" gutterBottom sx={{ flexGrow: 1 }}>
               Create New Form
             </Typography>
+
+            <Button
+  variant="outlined"
+  onClick={() => setGenerateDialogOpen(true)}
+  startIcon={<CodeIcon />}
+  size="large"
+  color="secondary"
+>
+  Generate Form
+</Button>
             
             <Button
               variant="outlined"
@@ -694,6 +767,53 @@ const FormBuilder = () => {
             </Button>
           </DialogActions>
         </Dialog>
+
+        {/* Generate Confirmation Dialog */}
+        <Dialog
+  open={generateDialogOpen}
+  onClose={() => setGenerateDialogOpen(false)}
+  aria-labelledby="generate-dialog-title"
+  aria-describedby="generate-dialog-description"
+  fullWidth
+  maxWidth="sm"
+>
+  <DialogTitle id="generate-dialog-title">Generate Form with AI</DialogTitle>
+  <DialogContent>
+    <DialogContentText id="generate-dialog-description">
+      Enter a prompt like "Generate school admission form" and we’ll generate a Form.
+    </DialogContentText>
+    <Box mt={2}>
+      <textarea
+        rows={4}
+        value={generationPrompt}
+        onChange={(e) => setGenerationPrompt(e.target.value)}
+        placeholder="e.g., Generate school admission form"
+        style={{
+          width: '100%',
+          border: '1px solid #ccc',
+          borderRadius: '4px',
+          padding: '10px',
+          fontFamily: 'inherit',
+          fontSize: '14px',
+        }}
+      />
+    </Box>
+  </DialogContent>
+  <DialogActions>
+    <Button onClick={() => setGenerateDialogOpen(false)} color="primary">
+      Cancel
+    </Button>
+<Button
+  variant="contained"
+  onClick={handleGenerate}
+  disabled={loading}
+>
+  {loading ? <CircularProgress size={24} /> : 'Generate Form'}
+</Button>
+
+  </DialogActions>
+</Dialog>
+
       </Container>
 
       {/* Footer */}

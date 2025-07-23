@@ -26,10 +26,7 @@ import {
   Settings as SettingsIcon,
   AccountCircle,
   ExitToApp,
-  Notifications,
-  Preview,
-  Assessment,
-  Code,
+
 } from '@mui/icons-material';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../firebase';
@@ -38,6 +35,7 @@ const drawerWidth = 240;
 
 function Layout() {
       const role = localStorage.getItem('userRole');
+    const { pathname } = useLocation();
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -57,6 +55,12 @@ function Layout() {
     return () => unsubscribe();
   }, [navigate]);
 
+
+  useEffect(() => {
+    // Scroll to top when pathname changes
+    window.scrollTo(0, 0);
+    }, [pathname]);
+   
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
@@ -85,7 +89,6 @@ function Layout() {
   ...(role === 'admin'
     ? [
         { id: 'create', text: 'Create Form', icon: <AddIcon />, path: '/form-builder' },
-        { id: 'analytics', text: 'Analytics', icon: <AnalyticsIcon />, path: '/analytics' },
       ]
     : []
   )

@@ -108,7 +108,7 @@ const ViewSubmission = () => {
         );
 
       case 'multi-text':
-        const answers = Array.isArray(submittedValue) ? submittedValue : [];
+        { const answers = Array.isArray(submittedValue) ? submittedValue : [];
         const count = field.textboxCount || 2;
         return (
           <Stack spacing={1}>
@@ -121,7 +121,7 @@ const ViewSubmission = () => {
               </Box>
             ))}
           </Stack>
-        );
+        ); }
 
       case 'select':
         return (
@@ -131,7 +131,7 @@ const ViewSubmission = () => {
         );
 
       case 'multi-select':
-        const selectedOptions = Array.isArray(submittedValue) ? submittedValue : [];
+        { const selectedOptions = Array.isArray(submittedValue) ? submittedValue : [];
         return (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
             {selectedOptions.length > 0 ? (
@@ -142,7 +142,7 @@ const ViewSubmission = () => {
               <em style={{ color: '#999' }}>No options selected</em>
             )}
           </Box>
-        );
+        ); }
 
       case 'radio':
         return (
@@ -174,7 +174,7 @@ const ViewSubmission = () => {
         );
 
       case 'checkbox':
-        const checkedOptions = Array.isArray(submittedValue) ? submittedValue : [];
+        { const checkedOptions = Array.isArray(submittedValue) ? submittedValue : [];
         return (
           <Box>
             {field.options?.map((option, idx) => (
@@ -207,7 +207,7 @@ const ViewSubmission = () => {
               </Box>
             ))}
           </Box>
-        );
+        ); }
 
       case 'boolean':
         return (
@@ -310,7 +310,7 @@ const ViewSubmission = () => {
 
       case 'file':
       case 'image':
-        const files = Array.isArray(submittedValue) ? submittedValue : [];
+        { const files = Array.isArray(submittedValue) ? submittedValue : [];
         return (
           <Box>
             {files.length > 0 ? (
@@ -335,10 +335,10 @@ const ViewSubmission = () => {
               <em style={{ color: '#999' }}>No files uploaded</em>
             )}
           </Box>
-        );
+        ); }
 
       case 'ranking':
-        const rankings = submittedValue || {};
+        { const rankings = submittedValue || {};
         return (
           <Box>
             {field.options?.map((option, idx) => (
@@ -353,7 +353,7 @@ const ViewSubmission = () => {
               </Box>
             ))}
           </Box>
-        );
+        ); }
 
       default:
         return (
@@ -506,35 +506,44 @@ const ViewSubmission = () => {
                         </Typography>
                       </Box>
                     ) : (
-                      <Stack spacing={3}>
-                        {page.fields.map((field) => (
-                          <Paper key={field.id} elevation={2} sx={{ p: 3, mb: 2 }}>
-                            <Typography 
-                              variant="body1" 
-                              component="label" 
-                              sx={{ 
-                                display: 'block',
-                                fontWeight: 600,
-                                mb: 2,
-                                color: 'text.primary'
-                              }}
-                            >
-                              {field.label}
-                              {field.required && (
-                                <Typography 
-                                  component="span" 
-                                  sx={{ color: 'error.main', ml: 0.5 }}
-                                >
-                                  *
-                                </Typography>
-                              )}
-                            </Typography>
-                            <Box sx={{ mb: 2 }}>
-                              {renderFormField(field, submission.formData?.[field.id])}
-                            </Box>
-                          </Paper>
-                        ))}
-                      </Stack>
+                    <Stack spacing={3}>
+  {page.fields.map((field, idx) => {
+    let questionNumber = idx + 1;
+    if (submission.formConfig?.pages && currentPage > 0) {
+      questionNumber += submission.formConfig.pages
+        .slice(0, currentPage)
+        .reduce((acc, p) => acc + (p.fields?.length || 0), 0);
+    }
+    return (
+      <Paper key={field.id || idx} elevation={2} sx={{ p: 3, mb: 2 }}>
+        <Typography
+          variant="body1"
+          component="label"
+          sx={{
+            display: 'block',
+            fontWeight: 600,
+            mb: 2,
+            color: 'text.primary'
+          }}
+        >
+          {questionNumber}. {field.label}
+          {field.required && (
+            <Typography
+              component="span"
+              sx={{ color: 'error.main', ml: 0.5 }}
+            >
+              *
+            </Typography>
+          )}
+        </Typography>
+        <Box sx={{ mb: 2 }}>
+          {renderFormField(field, submission.formData?.[field.id])}
+        </Box>
+      </Paper>
+    );
+  })}
+</Stack>
+
                     )}
                   </Box>
                 );
