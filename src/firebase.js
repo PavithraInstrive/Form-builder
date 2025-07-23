@@ -17,17 +17,8 @@ export const FIREBASE_VAPID_KEY ="BFhmvTbHe5DjOd2W6nQ_o41PdvMhmBEdwVxaMSy16P7E76
 const app = initializeApp(firebaseConfig);
 const messaging = getMessaging(app);
 
-// Simple function to get notification permission and token
-export const enableNotifications = async (userId) => {
+const getAndSaveFCMToken = async (userId) => {
   try {
-    // Ask for permission
-    const permission = await Notification.requestPermission();
-    
-    if (permission !== 'granted') {
-      alert('Please allow notifications to receive updates about new forms!');
-      return null;
-    }
-
     // Register service worker
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
 
@@ -38,20 +29,81 @@ export const enableNotifications = async (userId) => {
     });
 
     if (token) {
-      console.log("Got notification token:", token);
+      console.log("Got FCM token:", token.substring(0, 20) + "...");
       
-      // Save token to Firestore
-      const db = getFirestore(app);
-      await setDoc(doc(db, 'userTokens', userId), {
-        token: token,
-        userId: userId,
-        createdAt: new Date()
-      });
+      // Get user role from localStorage
+      const userRole = localStorage.getItem('userRole') || 'user';
       
-      return token;
+      // Only save token if user role is 'user' (not admin)
+      if (userRole === 'user') {
+        const db = getFirestore(app);
+        await setDoc(doc(db, 'userTokens', userId), {
+          token: token,
+          userId: userId,
+          role: userRole, // Store role with token
+          createdAt: serverTimestamp(),
+          lastUpdated: serverTimestamp()
+        });
+        
+        console.log("✅ Token saved for user role:", userRole);
+        return token;
+      } else {
+        console.log("❌ Token NOT saved - user is admin");
+        return null; // Don't save token for admins
+      }
     }
   } catch (error) {
-    console.error("Error getting notification token:", error);
+    console.error("Error getting FCM token:", error);
+    return null;
+  }
+};
+
+// Updated initialization function
+export const initializeNotifications = async (userId) => {
+  try {
+    const userRole = localStorage.getItem('userRole') || 'user';
+    
+    // Don't initialize notifications for admins
+    if (userRole === 'admin') {
+      console.log("❌ Notifications disabled for admin users");
+      return null;
+    }
+
+    // Check if notifications are already granted
+    if (Notification.permission === 'granted') {
+      return await getAndSaveFCMToken(userId);
+    }
+    
+    // Store userId for later use when permission is granted
+    localStorage.setItem('pendingNotificationUserId', userId);
+    return null;
+  } catch (error) {
+    console.error("Error initializing notifications:", error);
+    return null;
+  }
+};
+
+// Updated permission request function
+export const requestNotificationPermission = async (userId) => {
+  try {
+    const userRole = localStorage.getItem('userRole') || 'user';
+    
+    // Don't allow notification permission for admins
+    if (userRole === 'admin') {
+      console.log("❌ Notification permission denied for admin users");
+      return null;
+    }
+
+    const permission = await Notification.requestPermission();
+    
+    if (permission === 'granted') {
+      return await getAndSaveFCMToken(userId);
+    } else {
+      console.log('Notification permission denied');
+      return null;
+    }
+  } catch (error) {
+    console.error("Error requesting notification permission:", error);
     return null;
   }
 };
@@ -61,11 +113,14 @@ export const listenForMessages = () => {
   onMessage(messaging, (payload) => {
     console.log('Message received:', payload);
     
-    // Show notification
-    new Notification(payload.notification.title, {
-      body: payload.notification.body,
-      icon: '/icons/icon-192x192.png'
-    });
+    // Show notification if page is in focus
+    if (document.visibilityState === 'visible') {
+      new Notification(payload.notification.title, {
+        body: payload.notification.body,
+        icon: '/icons/icon-192x192.png',
+        tag: payload.data?.formId || 'general'
+      });
+    }
   });
 };
 

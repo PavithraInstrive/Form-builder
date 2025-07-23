@@ -1,5 +1,4 @@
-// FIXED Dashboard component - Replace your existing Dashboard
-
+// Dashboard.js - Updated version with automatic token handling
 import React, { useState, useEffect } from 'react';
 import {
   Container,
@@ -13,7 +12,8 @@ import {
   Switch,
   FormControlLabel,
   Paper,
-  CircularProgress
+  CircularProgress,
+  Snackbar
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -23,85 +23,56 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { enableNotifications, listenForMessages } from '../firebase';
+import { 
+  initializeNotifications, 
+  requestNotificationPermission, 
+  listenForMessages 
+} from '../firebase';
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  
-  // FIX: Use currentUser (not user) from your AuthContext
-  const { currentUser } = useAuth(); // Changed from { user } to { currentUser }
-  
+  const { currentUser } = useAuth(); 
   const role = localStorage.getItem('userRole');
   const isAdmin = role === 'admin';
   
   // Notification states
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState(Notification.permission);
+  const [tokenInitialized, setTokenInitialized] = useState(false);
+  const [showPermissionPrompt, setShowPermissionPrompt] = useState(false);
 
-  useEffect(() => {
-    // Check if notifications were previously enabled
-    if (currentUser) { // Changed from user to currentUser
-      const notificationStatus = localStorage.getItem(`notifications_${currentUser.uid}`);
-      if (notificationStatus === 'enabled') {
-        setNotificationsEnabled(true);
-      }
+ useEffect(() => {
+    if (currentUser && !isAdmin) { // Only initialize for non-admin users
+      initializeUserNotifications();
+      listenForMessages();
     }
+  }, [currentUser, isAdmin]);
 
-    // Set up message listener
-    listenForMessages();
-  }, [currentUser]); // Changed from [user] to [currentUser]
-
-  // Debug function to check user state
-  const debugUser = () => {
-    console.log('=== DEBUG USER INFO ===');
-    console.log('currentUser from context:', currentUser);
-    console.log('currentUser.uid:', currentUser?.uid);
-    console.log('localStorage userRole:', localStorage.getItem('userRole'));
-    console.log('=====================');
+  const initializeUserNotifications = async () => {
+    if (Notification.permission === 'granted') {
+      // User already granted permission, get token automatically
+      const token = await initializeNotifications(currentUser.uid);
+      if (token) {
+        setTokenInitialized(true);
+        console.log('FCM token initialized automatically');
+      }
+    } else if (Notification.permission === 'default') {
+      // Show subtle prompt for notifications
+      setShowPermissionPrompt(true);
+    }
+    // If denied, we respect user's choice and don't show prompts
   };
 
   const handleEnableNotifications = async () => {
-    // Debug first
-    debugUser();
-    
-    if (!currentUser || !currentUser.uid) { // Changed from user to currentUser
-      alert('Please log in first - no user found');
-      console.error('No currentUser found:', currentUser);
+    if (!currentUser?.uid) {
+      console.error('No user found');
       return;
     }
 
-    console.log('Enabling notifications for user:', currentUser.uid);
-    setNotificationLoading(true);
-    
-    try {
-      const token = await enableNotifications(currentUser.uid); // Changed from user.uid to currentUser.uid
-      
-      if (token) {
-        setNotificationsEnabled(true);
-        localStorage.setItem(`notifications_${currentUser.uid}`, 'enabled'); // Changed from user.uid to currentUser.uid
-        alert('🎉 Notifications enabled! You will now receive updates about new forms.');
-      } else {
-        alert('❌ Failed to enable notifications. Please try again.');
-      }
-    } catch (error) {
-      console.error('Error:', error);
-      alert('❌ Something went wrong. Please try again.');
-    }
-    
-    setNotificationLoading(false);
-  };
-
-  const handleDisableNotifications = () => {
-    setNotificationsEnabled(false);
-    localStorage.removeItem(`notifications_${currentUser?.uid}`); // Changed from user?.uid to currentUser?.uid
-    alert('🔕 Notifications disabled. You can re-enable them anytime.');
-  };
-
-  const handleToggleNotifications = () => {
-    if (notificationsEnabled) {
-      handleDisableNotifications();
-    } else {
-      handleEnableNotifications();
+    const token = await requestNotificationPermission(currentUser.uid);
+    if (token) {
+      setTokenInitialized(true);
+      setNotificationPermission('granted');
+      setShowPermissionPrompt(false);
     }
   };
 
@@ -136,11 +107,6 @@ const Dashboard = () => {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      {/* Debug button - remove this after testing */}
-      <Button onClick={debugUser} variant="outlined" sx={{ mb: 2 }} size="small">
-        Debug User Info
-      </Button>
-      
       {/* Welcome Header */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" gutterBottom>
@@ -202,7 +168,7 @@ const Dashboard = () => {
           <Card sx={{ mb: 3 }}>
             <CardContent>
               <Box display="flex" alignItems="center" gap={2} mb={2}>
-                {notificationsEnabled ? (
+                {notificationPermission === 'granted' ? (
                   <NotificationsIcon color="primary" />
                 ) : (
                   <NotificationsOffIcon color="disabled" />
@@ -215,45 +181,27 @@ const Dashboard = () => {
               <Typography variant="body2" color="text.secondary" paragraph>
                 {isAdmin 
                   ? 'Get notified about form submissions and system updates.'
-                  : 'Get instant notifications when new forms are available for you to fill out.'
+                  : 'Get instant notifications when new forms are available.'
                 }
               </Typography>
 
-              {notificationsEnabled ? (
+              {notificationPermission === 'granted' ? (
                 <Alert severity="success" sx={{ mb: 2 }}>
                   ✅ Notifications are enabled! You'll receive updates about {isAdmin ? 'form activity' : 'new forms'}.
+                  {!tokenInitialized && (
+                    <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                      Setting up notifications...
+                    </Typography>
+                  )}
+                </Alert>
+              ) : notificationPermission === 'denied' ? (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  🔕 Notifications are blocked. To receive updates, please enable notifications in your browser settings for this site.
                 </Alert>
               ) : (
                 <Alert severity="info" sx={{ mb: 2 }}>
                   📱 Enable notifications to get instant updates when {isAdmin ? 'users submit forms' : 'new forms are published'}.
                 </Alert>
-              )}
-
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={notificationsEnabled}
-                    onChange={handleToggleNotifications}
-                    disabled={notificationLoading}
-                    color="primary"
-                  />
-                }
-                label={notificationsEnabled ? 'Enabled' : 'Disabled'}
-              />
-
-              {!notificationsEnabled && (
-                <Box mt={2}>
-                  <Button
-                    variant="contained"
-                    onClick={handleEnableNotifications}
-                    disabled={notificationLoading}
-                    startIcon={<NotificationsIcon />}
-                    fullWidth
-                    size="small"
-                  >
-                    {notificationLoading ? 'Enabling...' : 'Enable Notifications'}
-                  </Button>
-                </Box>
               )}
             </CardContent>
           </Card>
@@ -272,7 +220,7 @@ const Dashboard = () => {
                   • Total submissions: Loading...
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  • Users with notifications: Loading...
+                  • Users with notifications: {tokenInitialized ? '✅' : '⏳'}
                 </Typography>
               </CardContent>
             </Card>
@@ -291,6 +239,34 @@ const Dashboard = () => {
           </Typography>
         </Paper>
       </Box>
+
+      {/* Subtle notification permission prompt */}
+      <Snackbar
+        open={showPermissionPrompt}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        action={
+          <Box>
+            <Button 
+              color="primary" 
+              size="small" 
+              onClick={handleEnableNotifications}
+            >
+              Enable
+            </Button>
+            <Button 
+              color="inherit" 
+              size="small" 
+              onClick={() => setShowPermissionPrompt(false)}
+            >
+              Later
+            </Button>
+          </Box>
+        }
+      >
+        <Alert severity="info" sx={{ width: '100%' }}>
+          📱 Want to get notified about {isAdmin ? 'form submissions' : 'new forms'}? 
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };

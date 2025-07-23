@@ -1,5 +1,5 @@
 // utils/simpleFormService.js
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 
 // Simple function to send notifications to all users
@@ -8,21 +8,22 @@ export const sendNotificationToAllUsers = async (title, body, formId) => {
     console.log('Starting to send notifications...');
     
     // Get all user tokens from Firestore
-    const tokensSnapshot = await getDocs(collection(db, 'userTokens'));
-    const tokens = [];
+   const q = query(
+      collection(db, 'userTokens'),
+      where('role', '==', 'user') // Only get tokens for 'user' role
+    );
     
-    tokensSnapshot.forEach(doc => {
-      const tokenData = doc.data();
-      if (tokenData.token) {
-        tokens.push(tokenData.token);
-      }
+    const tokensSnapshot = await getDocs(q);
+    const tokens = tokensSnapshot.docs.map(doc => doc.data().token);
+    
+    console.log(`📱 Found ${tokens.length} user tokens (admins excluded)`);
+    tokens.forEach((token, index) => {
+      console.log(`User Token ${index + 1}:`, token.substring(0, 30) + '...');
     });
-
-    console.log(`Found ${tokens.length} user tokens`);
-
+    
     if (tokens.length === 0) {
-      console.log('No users to notify');
-      return { success: true, sent: 0, message: 'No users have enabled notifications' };
+      console.log('❌ No user tokens found (only admins or no tokens)');
+      return { sent: 0, failed: 0 };
     }
 
     // Send to your backend API
