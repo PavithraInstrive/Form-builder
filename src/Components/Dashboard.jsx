@@ -9,8 +9,6 @@ import {
   Button,
   Box,
   Alert,
-  Switch,
-  FormControlLabel,
   Paper,
   CircularProgress,
   Snackbar
@@ -40,8 +38,10 @@ const Dashboard = () => {
   const [tokenInitialized, setTokenInitialized] = useState(false);
   const [showPermissionPrompt, setShowPermissionPrompt] = useState(false);
 
+  console.log('Current User:', currentUser);
+
  useEffect(() => {
-    if (currentUser && !isAdmin) { // Only initialize for non-admin users
+    if (currentUser && !isAdmin) { 
       initializeUserNotifications();
       listenForMessages();
     }
@@ -49,30 +49,13 @@ const Dashboard = () => {
 
   const initializeUserNotifications = async () => {
     if (Notification.permission === 'granted') {
-      // User already granted permission, get token automatically
       const token = await initializeNotifications(currentUser.uid);
       if (token) {
         setTokenInitialized(true);
         console.log('FCM token initialized automatically');
       }
     } else if (Notification.permission === 'default') {
-      // Show subtle prompt for notifications
       setShowPermissionPrompt(true);
-    }
-    // If denied, we respect user's choice and don't show prompts
-  };
-
-  const handleEnableNotifications = async () => {
-    if (!currentUser?.uid) {
-      console.error('No user found');
-      return;
-    }
-
-    const token = await requestNotificationPermission(currentUser.uid);
-    if (token) {
-      setTokenInitialized(true);
-      setNotificationPermission('granted');
-      setShowPermissionPrompt(false);
     }
   };
 
@@ -107,10 +90,9 @@ const Dashboard = () => {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      {/* Welcome Header */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" gutterBottom>
-          Welcome back, {currentUser?.displayName || currentUser?.email || 'User'}! 👋
+          Welcome back, {currentUser?.name || currentUser?.email || 'User'}! 👋
         </Typography>
         <Typography variant="body1" color="text.secondary">
           {isAdmin 
@@ -121,11 +103,8 @@ const Dashboard = () => {
       </Box>
 
       <Grid container spacing={4}>
-        {/* Quick Actions */}
         <Grid item xs={12} md={8}>
-          <Typography variant="h6" gutterBottom>
-            Quick Actions
-          </Typography>
+
           <Grid container spacing={3}>
             {quickActions.map((action, index) => (
               <Grid item xs={12} sm={6} key={index}>
@@ -158,13 +137,9 @@ const Dashboard = () => {
           </Grid>
         </Grid>
 
-        {/* Notification Settings */}
         <Grid item xs={12} md={4}>
-          <Typography variant="h6" gutterBottom>
-            Settings
-          </Typography>
+         
           
-          {/* Push Notifications Card */}
           <Card sx={{ mb: 3 }}>
             <CardContent>
               <Box display="flex" alignItems="center" gap={2} mb={2}>
@@ -187,7 +162,7 @@ const Dashboard = () => {
 
               {notificationPermission === 'granted' ? (
                 <Alert severity="success" sx={{ mb: 2 }}>
-                  ✅ Notifications are enabled! You'll receive updates about {isAdmin ? 'form activity' : 'new forms'}.
+                   Notifications are enabled! You'll receive updates about {isAdmin ? 'form activity' : 'new forms'}.
                   {!tokenInitialized && (
                     <Typography variant="caption" display="block" sx={{ mt: 1 }}>
                       Setting up notifications...
@@ -196,77 +171,19 @@ const Dashboard = () => {
                 </Alert>
               ) : notificationPermission === 'denied' ? (
                 <Alert severity="warning" sx={{ mb: 2 }}>
-                  🔕 Notifications are blocked. To receive updates, please enable notifications in your browser settings for this site.
+                 Notifications are blocked. To receive updates, please enable notifications in your browser settings for this site.
                 </Alert>
               ) : (
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  📱 Enable notifications to get instant updates when {isAdmin ? 'users submit forms' : 'new forms are published'}.
+                  Enable notifications to get instant updates when {isAdmin ? 'users submit forms' : 'new forms are published'}.
                 </Alert>
               )}
             </CardContent>
           </Card>
-
-          {/* Stats Card (for admins) */}
-          {isAdmin && (
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Quick Stats
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  • Active forms: Loading...
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  • Total submissions: Loading...
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  • Users with notifications: {tokenInitialized ? '✅' : '⏳'}
-                </Typography>
-              </CardContent>
-            </Card>
-          )}
         </Grid>
       </Grid>
 
-      {/* Recent Activity */}
-      <Box sx={{ mt: 4 }}>
-        <Typography variant="h6" gutterBottom>
-          Recent Activity
-        </Typography>
-        <Paper sx={{ p: 3 }}>
-          <Typography variant="body2" color="text.secondary">
-            Recent activity will appear here...
-          </Typography>
-        </Paper>
-      </Box>
 
-      {/* Subtle notification permission prompt */}
-      <Snackbar
-        open={showPermissionPrompt}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        action={
-          <Box>
-            <Button 
-              color="primary" 
-              size="small" 
-              onClick={handleEnableNotifications}
-            >
-              Enable
-            </Button>
-            <Button 
-              color="inherit" 
-              size="small" 
-              onClick={() => setShowPermissionPrompt(false)}
-            >
-              Later
-            </Button>
-          </Box>
-        }
-      >
-        <Alert severity="info" sx={{ width: '100%' }}>
-          📱 Want to get notified about {isAdmin ? 'form submissions' : 'new forms'}? 
-        </Alert>
-      </Snackbar>
     </Container>
   );
 };

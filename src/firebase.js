@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore, doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { getFirestore, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
 
@@ -19,10 +19,8 @@ const messaging = getMessaging(app);
 
 const getAndSaveFCMToken = async (userId) => {
   try {
-    // Register service worker
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
 
-    // Get FCM token
     const token = await getToken(messaging, {
       vapidKey: FIREBASE_VAPID_KEY,
       serviceWorkerRegistration: registration,
@@ -31,25 +29,23 @@ const getAndSaveFCMToken = async (userId) => {
     if (token) {
       console.log("Got FCM token:", token.substring(0, 20) + "...");
       
-      // Get user role from localStorage
       const userRole = localStorage.getItem('userRole') || 'user';
       
-      // Only save token if user role is 'user' (not admin)
       if (userRole === 'user') {
         const db = getFirestore(app);
         await setDoc(doc(db, 'userTokens', userId), {
           token: token,
           userId: userId,
-          role: userRole, // Store role with token
+          role: userRole,
           createdAt: serverTimestamp(),
           lastUpdated: serverTimestamp()
         });
         
-        console.log("✅ Token saved for user role:", userRole);
+        console.log(" Token saved for user role:", userRole);
         return token;
       } else {
-        console.log("❌ Token NOT saved - user is admin");
-        return null; // Don't save token for admins
+        console.log(" Token NOT saved - user is admin");
+        return null; 
       }
     }
   } catch (error) {
@@ -58,23 +54,19 @@ const getAndSaveFCMToken = async (userId) => {
   }
 };
 
-// Updated initialization function
 export const initializeNotifications = async (userId) => {
   try {
     const userRole = localStorage.getItem('userRole') || 'user';
     
-    // Don't initialize notifications for admins
     if (userRole === 'admin') {
-      console.log("❌ Notifications disabled for admin users");
+      console.log(" Notifications disabled for admin users");
       return null;
     }
 
-    // Check if notifications are already granted
     if (Notification.permission === 'granted') {
       return await getAndSaveFCMToken(userId);
     }
     
-    // Store userId for later use when permission is granted
     localStorage.setItem('pendingNotificationUserId', userId);
     return null;
   } catch (error) {
@@ -83,14 +75,12 @@ export const initializeNotifications = async (userId) => {
   }
 };
 
-// Updated permission request function
 export const requestNotificationPermission = async (userId) => {
   try {
     const userRole = localStorage.getItem('userRole') || 'user';
     
-    // Don't allow notification permission for admins
     if (userRole === 'admin') {
-      console.log("❌ Notification permission denied for admin users");
+      console.log("Notification permission denied for admin users");
       return null;
     }
 
@@ -108,12 +98,10 @@ export const requestNotificationPermission = async (userId) => {
   }
 };
 
-// Listen for foreground messages
 export const listenForMessages = () => {
   onMessage(messaging, (payload) => {
     console.log('Message received:', payload);
     
-    // Show notification if page is in focus
     if (document.visibilityState === 'visible') {
       new Notification(payload.notification.title, {
         body: payload.notification.body,

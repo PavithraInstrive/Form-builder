@@ -182,21 +182,18 @@ checkTokens();
       
       const newPublishedStatus = !form.published;
       
-      // Update form in Firestore
       await updateDoc(doc(db, "forms", form.id), {
         published: newPublishedStatus,
         publishedAt: newPublishedStatus ? serverTimestamp() : null,
         updatedAt: serverTimestamp()
       });
 
-      // Update local state
       setForms(forms.map(f => 
         f.id === form.id 
           ? { ...f, published: newPublishedStatus }
           : f
       ));
 
-      // Send notifications if publishing and user chose to send them
       if (newPublishedStatus && sendNotifs) {
         try {
           const result = await sendNotificationToAllUsers(
@@ -223,7 +220,6 @@ checkTokens();
     }
   };
 
-  // Handle the publish with notifications
   const handleConfirmPublish = () => {
     handlePublishToggle(selectedForm, true, sendNotifications);
   };
@@ -473,18 +469,18 @@ checkTokens();
       >
         <DialogTitle>
           <Box display="flex" alignItems="center" gap={1}>
-            <NotificationsIcon color="primary" />
+            {/* <NotificationsIcon color="primary" /> */}
             <Typography variant="h6">
               Publish Form & Notify Users
             </Typography>
           </Box>
         </DialogTitle>
         <DialogContent>
-          <Typography variant="body1" gutterBottom>
-            You're about to publish <strong>"{selectedForm?.formConfig?.formTitle}"</strong>
+          <Typography variant="body1" gutterBottom sx={{ mb: 2 }}>
+           <strong>"{selectedForm?.formConfig?.formTitle}"</strong>
           </Typography>
 
-          <FormControlLabel
+          {/* <FormControlLabel
             control={
               <Switch
                 checked={sendNotifications}
@@ -494,7 +490,7 @@ checkTokens();
             }
             label="Send push notifications to all users"
             sx={{ mb: 2, mt: 2 }}
-          />
+          /> */}
 
           {sendNotifications && (
             <TextField
@@ -509,13 +505,13 @@ checkTokens();
             />
           )}
 
-          <Alert severity={sendNotifications ? "info" : "warning"}>
+          {/* <Alert severity={sendNotifications ? "info" : "warning"}>
             {sendNotifications ? (
               <>📱 All users who enabled notifications will be instantly notified about this form.</>
             ) : (
               <>📝 Form will be published without sending notifications. Users will need to check the forms page.</>
             )}
-          </Alert>
+          </Alert> */}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPublishDialogOpen(false)}>
@@ -525,7 +521,7 @@ checkTokens();
             onClick={handleConfirmPublish}
             variant="contained"
             disabled={notificationLoading}
-            startIcon={notificationLoading ? <CircularProgress size={20} /> : <PublishIcon />}
+            startIcon={ <PublishIcon />}
           >
             {notificationLoading ? 'Publishing...' : 'Publish Form'}
           </Button>
