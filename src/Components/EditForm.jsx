@@ -32,7 +32,9 @@ import {
   NavigateNext as NavigateNextIcon,
   Star as StarIcon,
 } from '@mui/icons-material';
-import axios from 'axios';
+
+// Import the new admin notification service
+import { sendNotificationToAllAdmins } from '../utils/FormService';
 
 const EditForm = () => {
   const { formId } = useParams();
@@ -527,6 +529,7 @@ const EditForm = () => {
     return processedData;
   };
 
+  // UPDATED: Enhanced submit function with admin notifications
   const handleSubmit = async () => {
     // Validate all pages
     let allValid = true;
@@ -552,9 +555,7 @@ const EditForm = () => {
 
       // Process form data to handle FileList objects
       const processedFormData = processFormDataForStorage(formData);     
-       const userDetails = JSON.parse(localStorage.getItem('userDetails'));
-      const token = JSON.parse(localStorage.getItem('device_token'));
-
+      const userDetails = JSON.parse(localStorage.getItem('userDetails'));
 
       const submissionData = {
         user: {userId: user.uid, name: userDetails.name},
@@ -565,17 +566,40 @@ const EditForm = () => {
         createdAt: serverTimestamp(),
       };
 
+      // Save the submission
       await addDoc(collection(db, 'formSubmissions'), submissionData);
 
+      // Update form with submitted user
       const formDocRef = doc(db, 'forms', formId);
       await updateDoc(formDocRef, {
         submittedUserIds: arrayUnion(user.uid), 
       });
-       await axios.post('http://localhost:3000/api/notify', {
-      token: token,
-      "title": "Test Push",
-      "body": "User Submitted " + submissionData.formTitle + " Form !"
-    });
+
+      // NEW: Send notification to all admins about the form submission
+      try {
+        const notificationTitle = 'New Form Submission';
+        const notificationBody = `${userDetails?.name || 'A user'} has submitted the "${formConfig.formTitle}" form.`;
+        
+        const adminNotificationResult = await sendNotificationToAllAdmins(
+          notificationTitle,
+          notificationBody,
+          formId,
+          {
+            userId: user.uid,
+            userName: userDetails?.name || 'Unknown User',
+            userEmail: user.email
+          }
+        );
+
+        console.log('Admin notification result:', adminNotificationResult);
+        
+        if (adminNotificationResult.sent > 0) {
+          console.log(`✅ ${adminNotificationResult.sent} admins notified about form submission`);
+        }
+      } catch (notificationError) {
+        console.error('Failed to send admin notifications:', notificationError);
+        // Don't fail the entire submission if notifications fail
+      }
 
       setSubmitSuccess(true);
       

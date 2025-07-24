@@ -1,4 +1,4 @@
-// Dashboard.js - Updated version with automatic token handling
+// Dashboard.js - Updated version with admin notification support
 import React, { useState, useEffect } from 'react';
 import {
   Container,
@@ -40,12 +40,13 @@ const Dashboard = () => {
 
   console.log('Current User:', currentUser);
 
- useEffect(() => {
-    if (currentUser && !isAdmin) { 
+  // Updated: Initialize notifications for both users and admins
+  useEffect(() => {
+    if (currentUser) { 
       initializeUserNotifications();
       listenForMessages();
     }
-  }, [currentUser, isAdmin]);
+  }, [currentUser]);
 
   const initializeUserNotifications = async () => {
     if (Notification.permission === 'granted') {
@@ -56,6 +57,15 @@ const Dashboard = () => {
       }
     } else if (Notification.permission === 'default') {
       setShowPermissionPrompt(true);
+    }
+  };
+
+  const handleEnableNotifications = async () => {
+    const token = await requestNotificationPermission(currentUser.uid);
+    if (token) {
+      setTokenInitialized(true);
+      setNotificationPermission('granted');
+      setShowPermissionPrompt(false);
     }
   };
 
@@ -104,7 +114,6 @@ const Dashboard = () => {
 
       <Grid container spacing={4}>
         <Grid item xs={12} md={8}>
-
           <Grid container spacing={3}>
             {quickActions.map((action, index) => (
               <Grid item xs={12} sm={6} key={index}>
@@ -138,8 +147,6 @@ const Dashboard = () => {
         </Grid>
 
         <Grid item xs={12} md={4}>
-         
-          
           <Card sx={{ mb: 3 }}>
             <CardContent>
               <Box display="flex" alignItems="center" gap={2} mb={2}>
@@ -155,14 +162,14 @@ const Dashboard = () => {
               
               <Typography variant="body2" color="text.secondary" paragraph>
                 {isAdmin 
-                  ? 'Get notified about form submissions and system updates.'
+                  ? 'Get notified when users submit forms and about system updates.'
                   : 'Get instant notifications when new forms are available.'
                 }
               </Typography>
 
               {notificationPermission === 'granted' ? (
                 <Alert severity="success" sx={{ mb: 2 }}>
-                   Notifications are enabled! You'll receive updates about {isAdmin ? 'form activity' : 'new forms'}.
+                  Notifications are enabled! You'll receive updates about {isAdmin ? 'form submissions' : 'new forms'}.
                   {!tokenInitialized && (
                     <Typography variant="caption" display="block" sx={{ mt: 1 }}>
                       Setting up notifications...
@@ -171,19 +178,27 @@ const Dashboard = () => {
                 </Alert>
               ) : notificationPermission === 'denied' ? (
                 <Alert severity="warning" sx={{ mb: 2 }}>
-                 Notifications are blocked. To receive updates, please enable notifications in your browser settings for this site.
+                  Notifications are blocked. To receive updates, please enable notifications in your browser settings for this site.
                 </Alert>
               ) : (
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  Enable notifications to get instant updates when {isAdmin ? 'users submit forms' : 'new forms are published'}.
-                </Alert>
+                <>
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    Enable notifications to get instant updates when {isAdmin ? 'users submit forms' : 'new forms are published'}.
+                  </Alert>
+                  <Button
+                    variant="contained"
+                    startIcon={<NotificationsIcon />}
+                    onClick={handleEnableNotifications}
+                    size="small"
+                  >
+                    Enable Notifications
+                  </Button>
+                </>
               )}
             </CardContent>
           </Card>
         </Grid>
       </Grid>
-
-
     </Container>
   );
 };
