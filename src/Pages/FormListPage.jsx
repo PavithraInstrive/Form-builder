@@ -62,7 +62,8 @@ const SimpleFormListPage = () => {
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [sendNotifications, setSendNotifications] = useState(true);
   const [customMessage, setCustomMessage] = useState("");
-  const [notificationLoading, setNotificationLoading] = useState(false);
+  // Changed: Use per-form loading state
+  const [publishingFormId, setPublishingFormId] = useState(null); // form.id or null
   const [successMessage, setSuccessMessage] = useState("");
   
   const navigate = useNavigate();
@@ -176,24 +177,21 @@ checkTokens();
   };
 
   // UPDATED: Publish function with notification support
-  const handlePublishToggle = async (form, showNotificationDialog = true, sendNotifs = false) => {
+  // Removed unused showNotificationDialog param
+  const handlePublishToggle = async (form, _unused = true, sendNotifs = false) => {
     try {
-      setNotificationLoading(true);
-      
+      setPublishingFormId(form.id); // Only this form is loading
       const newPublishedStatus = !form.published;
-      
       await updateDoc(doc(db, "forms", form.id), {
         published: newPublishedStatus,
         publishedAt: newPublishedStatus ? serverTimestamp() : null,
         updatedAt: serverTimestamp()
       });
-
       setForms(forms.map(f => 
         f.id === form.id 
           ? { ...f, published: newPublishedStatus }
           : f
       ));
-
       if (newPublishedStatus && sendNotifs) {
         try {
           const result = await sendNotificationToAllUsers(
@@ -201,7 +199,6 @@ checkTokens();
             customMessage || `"${form.formConfig?.formTitle}" form has been published and is now available.`,
             form.id
           );
-          
           setSuccessMessage(`Form published and ${result.sent} users notified!`);
         } catch (notificationError) {
           console.error('Failed to send notifications:', notificationError);
@@ -210,12 +207,11 @@ checkTokens();
       } else {
         setSuccessMessage(`Form ${newPublishedStatus ? 'published' : 'unpublished'} successfully!`);
       }
-
     } catch (error) {
       console.error("Error updating form:", error);
       alert("Failed to update form status");
     } finally {
-      setNotificationLoading(false);
+      setPublishingFormId(null); // Reset after done
       setPublishDialogOpen(false);
     }
   };
@@ -401,9 +397,9 @@ checkTokens();
                             onClick={() => handlePublishClick(form)}
                             title={form.published ? 'Unpublish Form' : 'Publish Form & Notify Users'}
                             size="small"
-                            disabled={notificationLoading}
+                            disabled={publishingFormId === form.id}
                           >
-                            {notificationLoading ? (
+                            {publishingFormId === form.id ? (
                               <CircularProgress size={20} />
                             ) : (
                               <>
@@ -520,10 +516,10 @@ checkTokens();
           <Button
             onClick={handleConfirmPublish}
             variant="contained"
-            disabled={notificationLoading}
+            disabled={publishingFormId === selectedForm?.id}
             startIcon={ <PublishIcon />}
           >
-            {notificationLoading ? 'Publishing...' : 'Publish Form'}
+            {publishingFormId === selectedForm?.id ? 'Publishing...' : 'Publish Form'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -528,7 +528,7 @@ ${JSON.stringify(sampleConfig, null, 2)}
 Prompt: ${generationPrompt}`;
     }
 
-    const response = await axios.post('http://localhost:3000/api/claude', {
+    const response = await axios.post('https://form-builder-bacnend-production.up.railway.app/api/claude', {
       prompt: prompt
     });
 
